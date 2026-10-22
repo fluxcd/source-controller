@@ -87,6 +87,8 @@ var (
 	testServer   *testserver.ArtifactServer
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
+
+	testOCIRepositoryReconciler *OCIRepositoryReconciler
 )
 
 var (
@@ -345,12 +347,13 @@ func TestMain(m *testing.M) {
 	testCache = cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
 
-	if err := (&OCIRepositoryReconciler{
+	testOCIRepositoryReconciler = &OCIRepositoryReconciler{
 		Client:   testEnv,
 		Recorder: events.NewFakeRecorder(32, false),
 		Metrics:  testMetricsH,
 		Storage:  testStorage,
-	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
+	}
+	if err := testOCIRepositoryReconciler.SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))

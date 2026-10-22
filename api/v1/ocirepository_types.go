@@ -253,6 +253,14 @@ func (in *OCIRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 
+// GetProvider returns the OCI authentication provider, defaulting to generic.
+func (in *OCIRepository) GetProvider() string {
+	if in.Spec.Provider == "" {
+		return GenericOCIProvider
+	}
+	return in.Spec.Provider
+}
+
 // GetLayerMediaType returns the media type layer selector if found in spec.
 func (in *OCIRepository) GetLayerMediaType() string {
 	if in.Spec.LayerSelector == nil {

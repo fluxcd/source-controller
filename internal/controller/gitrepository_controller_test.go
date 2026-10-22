@@ -47,7 +47,6 @@ import (
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
-	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/gittestserver"
@@ -61,7 +60,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -926,30 +924,12 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			wantErr: "ManagedIdentityCredential",
 		},
 		{
-			name: "azure provider with service account and feature gate for object-level identity disabled",
-			url:  "https://dev.azure.com/foo/bar/_git/baz",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Provider = sourcev1.GitProviderAzure
-				obj.Spec.ServiceAccountName = "azure-sa"
-			},
-			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
-		},
-		{
 			name: "aws provider with non codecommit URL",
 			url:  "https://github.com/org/repo.git",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderAWS
 			},
 			wantErr: "invalid AWS CodeCommit Git URL: github.com",
-		},
-		{
-			name: "aws provider with service account and feature gate for object-level identity disabled",
-			url:  "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Provider = sourcev1.GitProviderAWS
-				obj.Spec.ServiceAccountName = "aws-sa"
-			},
-			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
 		},
 		{
 			name: "github provider with no secret ref",
@@ -1068,7 +1048,6 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -1491,7 +1470,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -1639,7 +1617,6 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				Recorder:          events.NewFakeRecorder(32, false),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
-				features:          features.FeatureGates(),
 				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -1893,7 +1870,6 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					Build(),
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -1945,7 +1921,6 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	r := &GitRepositoryReconciler{
 		Recorder:     events.NewFakeRecorder(32, false),
 		Storage:      testStorage,
-		features:     features.FeatureGates(),
 		patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
@@ -2693,7 +2668,6 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -2846,7 +2820,6 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				Client:       clientBuilder.Build(),
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -3248,7 +3221,6 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &GitRepositoryReconciler{
 				Recorder:     recorder,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)

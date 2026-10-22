@@ -17,11 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"os"
 	"time"
 
 	flag "github.com/spf13/pflag"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"helm.sh/helm/v4/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,6 +54,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
+	fluxspiffe "github.com/fluxcd/pkg/spiffe"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 
@@ -94,27 +98,31 @@ func main() {
 	)
 
 	var (
-		metricsAddr            string
-		eventsAddr             string
-		healthAddr             string
-		concurrent             int
-		requeueDependency      time.Duration
-		helmIndexLimit         int64
-		helmChartLimit         int64
-		helmChartFileLimit     int64
-		artifactOptions        artcfg.Options
-		clientOptions          client.Options
-		logOptions             logger.Options
-		leaderElectionOptions  leaderelection.Options
-		rateLimiterOptions     helper.RateLimiterOptions
-		featureGates           feathelper.FeatureGates
-		watchOptions           helper.WatchOptions
-		intervalJitterOptions  jitter.IntervalOptions
-		helmCacheMaxSize       int
-		helmCacheTTL           string
-		helmCachePurgeInterval string
-		tokenCacheOptions      pkgcache.TokenFlags
-		defaultServiceAccount  string
+		metricsAddr               string
+		eventsAddr                string
+		healthAddr                string
+		concurrent                int
+		requeueDependency         time.Duration
+		helmIndexLimit            int64
+		helmChartLimit            int64
+		helmChartFileLimit        int64
+		artifactOptions           artcfg.Options
+		clientOptions             client.Options
+		logOptions                logger.Options
+		leaderElectionOptions     leaderelection.Options
+		rateLimiterOptions        helper.RateLimiterOptions
+		featureGates              feathelper.FeatureGates
+		watchOptions              helper.WatchOptions
+		intervalJitterOptions     jitter.IntervalOptions
+		helmCacheMaxSize          int
+		helmCacheTTL              string
+		helmCachePurgeInterval    string
+		tokenCacheOptions         pkgcache.TokenFlags
+		defaultServiceAccount     string
+		authorizedArtifactClients []string
+		authorizedEventServers    []string
+		spiffeBrokerEndpoint      string
+		spiffeBrokerIDs           []string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -143,6 +151,14 @@ func main() {
 		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.StringVar(&defaultServiceAccount, auth.ControllerFlagDefaultServiceAccount,
 		"", "Default service account to use for workload identity when not specified in resources.")
+	flag.StringArrayVar(&authorizedArtifactClients, fluxspiffe.ControllerFlagAuthorizedArtifactClientSPIFFEID, nil,
+		"SPIFFE ID authorized to fetch artifacts from the artifact server. Can be repeated.")
+	flag.StringArrayVar(&authorizedEventServers, fluxspiffe.ControllerFlagAuthorizedEventServerSPIFFEID, nil,
+		"SPIFFE ID of an event server authorized to receive events. Can be repeated.")
+	flag.StringVar(&spiffeBrokerEndpoint, fluxspiffe.ControllerFlagSPIFFEBrokerEndpoint, "",
+		"The gRPC URL of the SPIFFE Broker endpoint.")
+	flag.StringArrayVar(&spiffeBrokerIDs, fluxspiffe.ControllerFlagSPIFFEBrokerID, nil,
+		"SPIFFE ID of the SPIFFE Broker endpoint. Can be repeated.")
 
 	artifactOptions.BindFlags(flag.CommandLine)
 	clientOptions.BindFlags(flag.CommandLine)
@@ -158,25 +174,10 @@ func main() {
 
 	logger.SetLogger(logger.NewLogger(logOptions))
 
-	if defaultServiceAccount != "" {
-		auth.SetDefaultServiceAccount(defaultServiceAccount)
-	}
+	ctx := ctrl.SetupSignalHandler()
 
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
 		setupLog.Error(err, "unable to load feature gates")
-		os.Exit(1)
-	}
-
-	switch enabled, err := features.Enabled(auth.FeatureGateObjectLevelWorkloadIdentity); {
-	case err != nil:
-		setupLog.Error(err, "unable to check feature gate "+auth.FeatureGateObjectLevelWorkloadIdentity)
-		os.Exit(1)
-	case enabled:
-		auth.EnableObjectLevelWorkloadIdentity()
-	}
-
-	if auth.InconsistentObjectLevelConfiguration() {
-		setupLog.Error(auth.ErrInconsistentObjectLevelConfiguration, "invalid configuration")
 		os.Exit(1)
 	}
 
@@ -190,11 +191,69 @@ func main() {
 	mgr := mustSetupManager(metricsAddr, healthAddr, concurrent, watchOptions, clientOptions, leaderElectionOptions)
 
 	probes.SetupChecks(mgr, setupLog)
+	if err := mgr.AddReadyzCheck("leader-election", probes.LeaderElectedReadyz(mgr.Elected())); err != nil {
+		setupLog.Error(err, "unable to create leader election readiness check")
+		os.Exit(1)
+	}
 
 	metrics := helper.NewMetrics(mgr, metrics.MustMakeRecorder(), sourcev1.SourceFinalizer)
 	cacheRecorder := cache.MustMakeMetrics()
 
-	eventRecorder, err := events.NewRecorder(ctrl.Log, eventsAddr, controllerName, events.WithManager(mgr))
+	var eventTLSConfig *tls.Config
+	var spiffeBroker fluxbroker.Client
+	if len(authorizedArtifactClients) > 0 || len(authorizedEventServers) > 0 ||
+		spiffeBrokerEndpoint != "" || len(spiffeBrokerIDs) > 0 {
+		source, err := workloadapi.NewX509Source(ctx)
+		if err != nil {
+			setupLog.Error(err, "unable to create SPIFFE X.509 source")
+			os.Exit(1)
+		}
+		defer func() {
+			if err := source.Close(); err != nil {
+				setupLog.Error(err, "unable to close SPIFFE X.509 source")
+			}
+		}()
+
+		if len(authorizedArtifactClients) > 0 {
+			artifactTLSConfig, err := fluxspiffe.BuildTLSConfig(source, authorizedArtifactClients...)
+			if err != nil {
+				setupLog.Error(err, "unable to configure SPIFFE mTLS for the artifact server")
+				os.Exit(1)
+			}
+			setupLog.Info("artifact server will use inter-controller mTLS via SPIFFE", "spiffeIDs", authorizedArtifactClients)
+			artifactOptions.TLSConfig = artifactTLSConfig
+		}
+
+		if len(authorizedEventServers) > 0 {
+			eventTLSConfig, err = fluxspiffe.BuildTLSConfig(source, authorizedEventServers...)
+			if err != nil {
+				setupLog.Error(err, "unable to configure SPIFFE mTLS for the event server")
+				os.Exit(1)
+			}
+			setupLog.Info("event server will use inter-controller mTLS via SPIFFE", "spiffeIDs", authorizedEventServers)
+		}
+
+		if spiffeBrokerEndpoint != "" || len(spiffeBrokerIDs) > 0 {
+			spiffeBroker, err = fluxbroker.New(spiffeBrokerEndpoint, spiffeBrokerIDs, source)
+			if err != nil {
+				setupLog.Error(err, "unable to create SPIFFE Broker client")
+				os.Exit(1)
+			}
+			defer func() {
+				if err := spiffeBroker.Close(); err != nil {
+					setupLog.Error(err, "unable to close SPIFFE Broker client")
+				}
+			}()
+			setupLog.Info("object-level workload identity will use the SPIFFE Broker API",
+				"endpoint", spiffeBrokerEndpoint, "spiffeIDs", spiffeBrokerIDs)
+		}
+	}
+
+	eventRecorderOpts := []events.RecorderOption{events.WithManager(mgr)}
+	if eventTLSConfig != nil {
+		eventRecorderOpts = append(eventRecorderOpts, events.WithTLSConfig(eventTLSConfig))
+	}
+	eventRecorder, err := events.NewRecorder(ctrl.Log, eventsAddr, controllerName, eventRecorderOpts...)
 	if err != nil {
 		setupLog.Error(err, "unable to create event recorder")
 		os.Exit(1)
@@ -229,15 +288,15 @@ func main() {
 		}
 	}
 
-	ctx := ctrl.SetupSignalHandler()
-
 	if err := (&controller.GitRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		Recorder:       eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:                mgr.GetClient(),
+		Recorder:              eventRecorder,
+		Metrics:               metrics,
+		Storage:               storage,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
@@ -282,12 +341,14 @@ func main() {
 	}
 
 	if err := (&controller.BucketReconciler{
-		Client:         mgr.GetClient(),
-		Recorder:       eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:                mgr.GetClient(),
+		Recorder:              eventRecorder,
+		Metrics:               metrics,
+		Storage:               storage,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -303,6 +364,8 @@ func main() {
 		TokenCache:            tokenCache,
 		CosignVerifierFactory: CosignVerifierFactory,
 		Metrics:               metrics,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

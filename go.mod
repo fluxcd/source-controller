@@ -23,19 +23,21 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.8.4
 	github.com/fluxcd/cli-utils v1.4.0
+	github.com/fluxcd/pkg/apis/crypto v0.5.0
 	github.com/fluxcd/pkg/apis/event v0.32.0
-	github.com/fluxcd/pkg/apis/meta v1.35.0
-	github.com/fluxcd/pkg/artifact v0.24.0
-	github.com/fluxcd/pkg/auth v0.62.0
-	github.com/fluxcd/pkg/cache v0.17.0
+	github.com/fluxcd/pkg/apis/meta v1.37.0
+	github.com/fluxcd/pkg/artifact v0.26.0
+	github.com/fluxcd/pkg/auth v0.65.0
+	github.com/fluxcd/pkg/cache v0.18.0
 	github.com/fluxcd/pkg/git v0.55.0
 	github.com/fluxcd/pkg/gittestserver v0.32.0
 	github.com/fluxcd/pkg/helmtestserver v0.44.0
 	github.com/fluxcd/pkg/http/transport v0.9.0
 	github.com/fluxcd/pkg/masktoken v0.10.0
 	github.com/fluxcd/pkg/oci v0.72.0
-	github.com/fluxcd/pkg/runtime v0.119.0
+	github.com/fluxcd/pkg/runtime v0.121.0
 	github.com/fluxcd/pkg/sourceignore v0.21.0
+	github.com/fluxcd/pkg/spiffe v0.1.0
 	github.com/fluxcd/pkg/ssh v0.28.0
 	github.com/fluxcd/pkg/tar v1.3.0
 	github.com/fluxcd/pkg/testserver v0.15.0
@@ -63,6 +65,7 @@ require (
 	github.com/sigstore/sigstore-go v1.2.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/pflag v1.0.10
+	github.com/spiffe/go-spiffe/v2 v2.9.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sync v0.24.0
 	google.golang.org/api v0.297.0
@@ -221,6 +224,7 @@ require (
 	github.com/go-openapi/validate v0.26.1 // indirect
 	github.com/go-piv/piv-go/v2 v2.6.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/gobuffalo/flect v1.0.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
@@ -326,7 +330,6 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
-	github.com/spiffe/go-spiffe/v2 v2.7.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect

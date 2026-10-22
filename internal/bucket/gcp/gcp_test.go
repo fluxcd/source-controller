@@ -282,7 +282,7 @@ func TestNewClientWithProxyErr(t *testing.T) {
 		bucketAttrs, err := gcpClient.Client.Bucket("some-bucket").Attrs(context.Background())
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(bucketAttrs).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("failed to create provider access token"))
+		g.Expect(err.Error()).To(ContainSubstring("failed to create provider access credential"))
 	})
 }
 

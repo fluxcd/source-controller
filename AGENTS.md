@@ -135,7 +135,6 @@ Bump `fluxcd/pkg/*` modules as a set — version skew breaks `go.sum`. Run `make
 - `make verify` is the CI gate — a dirty diff means you forgot to run codegen or tidy.
 - The `replace` directives in `go.mod` (semver and go-digest) exist for correctness. Leave them alone.
 - `Storage` serializes writes per object via `fluxcd/pkg/lockedfile` and expects `--storage-path` to be a real local directory. Never write artifacts outside `Storage.BasePath` — the file server exposes that path verbatim at `--storage-addr`.
-- Workload Identity is feature-gated by `auth.FeatureGateObjectLevelWorkloadIdentity` (from `fluxcd/pkg/auth`). Token caching is opt-in via `--token-cache-max-size`.
 - `CacheSecretsAndConfigMaps` (in `internal/features`) is off by default; `Secret`/`ConfigMap` lookups bypass the cache and hit the API server directly. Mind that before adding new secret reads to a hot path.
 - The controller watches a label-selected subset of its CRs — see `Cache.ByObject` in `mustSetupManager`. Adding a new kind requires updating both `main.go` and the scheme.
 - `pkg/azure`, `pkg/gcp`, `pkg/minio` are importable by external consumers. Treat their exported surface as semi-public API.
