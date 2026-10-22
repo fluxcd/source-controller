@@ -281,9 +281,12 @@ the `.spec.provider` field:
   use the Service Account token for object-level workload identity when the
   Service Account opts in with the credential annotations described below.
 - When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
-  will be used for Workload Identity authentication. In this case, the controller
-  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
-  controller will error out.
+  will be used for Workload Identity authentication.
+
+For a complete guide to the ServiceAccount annotations used for object-level
+workload identity, including the `spiffe` credential provider, see the
+[ServiceAccount annotations](/flux/integrations/serviceaccount-annotations)
+docs.
 
 **Note:** that for a publicly accessible image repository, you don't need to
 provide a `secretRef` nor `serviceAccountName`.
@@ -313,13 +316,6 @@ A ServiceAccount that does not set both required annotations does not opt in
 and continues to use its `imagePullSecrets`, or anonymous access if it has none.
 Setting only one of the two required annotations is a configuration error. The
 credential annotations cannot be combined with `imagePullSecrets`.
-
-Object-level workload identity for the `generic` provider requires the
-`ObjectLevelWorkloadIdentity` feature gate to be enabled:
-
-```bash
---feature-gates=ObjectLevelWorkloadIdentity=true
-```
 
 Example:
 

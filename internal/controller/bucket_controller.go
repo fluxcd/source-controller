@@ -57,6 +57,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/bucket/azure"
@@ -134,8 +135,7 @@ type BucketReconciler struct {
 	TokenCache     *cache.TokenCache
 
 	DefaultServiceAccount string
-
-	ObjectLevelWorkloadIdentity bool
+	SPIFFEBroker          fluxbroker.Interface
 
 	patchOptions []patch.Option
 }
@@ -438,18 +438,6 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.ServiceAccountName != ""
-	if usesObjectLevelWorkloadIdentity {
-		if !r.ObjectLevelWorkloadIdentity {
-			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-			err := fmt.Errorf(msgFmt, gate)
-			e := serror.NewStalling(err, meta.FeatureGateDisabledReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	}
-
 	creds, err := r.setupCredentials(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
@@ -899,7 +887,8 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 	}
 	authOpts = append(authOpts,
 		auth.WithClient(r.Client),
-		auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.BucketKind, obj))
+		auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.BucketKind, obj),
+		auth.WithSPIFFEBroker(r.SPIFFEBroker))
 	if sa != nil {
 		authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
 	}
