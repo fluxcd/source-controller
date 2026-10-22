@@ -98,4 +98,29 @@ func TestPurgeTempRoots(t *testing.T) {
 		g.Expect(purged).To(Equal(0))
 		g.Expect(dir).To(BeADirectory())
 	})
+
+	t.Run("removes a root with many entries", func(t *testing.T) {
+		g := NewWithT(t)
+		root := filepath.Join(t.TempDir(), "source-controller"+staleSuffix+"1")
+		for _, name := range []string{"gitrepository-default-a-1", "helmchart-default-b-2", "chart-build-3"} {
+			g.Expect(os.MkdirAll(filepath.Join(root, name, "nested"), 0o700)).To(Succeed())
+		}
+		g.Expect(os.WriteFile(filepath.Join(root, "chart-index-4.yaml"), []byte("x"), 0o600)).To(Succeed())
+
+		purged := PurgeTempRoots(context.Background(), logr.Discard(), []string{root})
+		g.Expect(purged).To(Equal(1))
+		g.Expect(root).ToNot(BeAnExistingFile())
+	})
+
+	t.Run("removes files and tolerates missing paths", func(t *testing.T) {
+		g := NewWithT(t)
+		parent := t.TempDir()
+		file := filepath.Join(parent, "source-controller"+staleSuffix+"1")
+		missing := filepath.Join(parent, "source-controller"+staleSuffix+"2")
+		g.Expect(os.WriteFile(file, []byte("x"), 0o600)).To(Succeed())
+
+		purged := PurgeTempRoots(context.Background(), logr.Discard(), []string{file, missing})
+		g.Expect(purged).To(Equal(2))
+		g.Expect(file).ToNot(BeAnExistingFile())
+	})
 }

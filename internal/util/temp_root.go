@@ -69,18 +69,21 @@ func PrepareTempRoot(root string) ([]string, error) {
 	return stale, nil
 }
 
-// PurgeTempRoots removes the given paths, logging every removal at info
-// level and every failure at error level. It stops as soon as ctx is done
-// and returns the number of paths that were removed.
+// PurgeTempRoots removes the given paths. A directory is emptied one entry
+// at a time, so that ctx is honoured between entries, and then removed.
+// Every removed path is logged at info level and every failure at error
+// level. It stops as soon as ctx is done and returns the number of paths
+// that were removed. Paths it did not remove are picked up by
+// PrepareTempRoot on the next start.
 func PurgeTempRoots(ctx context.Context, log logr.Logger, paths []string) int {
 	purged := 0
 	for i, path := range paths {
-		if err := ctx.Err(); err != nil {
-			log.Error(err, "aborted purge of stale tmp dirs",
-				"purged", purged, "remaining", len(paths)-i)
-			return purged
-		}
-		if err := os.RemoveAll(path); err != nil {
+		if err := purgeTempRoot(ctx, path); err != nil {
+			if ctx.Err() != nil {
+				log.Error(err, "aborted purge of stale tmp dirs",
+					"path", path, "purged", purged, "remaining", len(paths)-i)
+				return purged
+			}
 			log.Error(err, "failed to remove stale tmp dir", "path", path)
 			continue
 		}
@@ -88,4 +91,23 @@ func PurgeTempRoots(ctx context.Context, log logr.Logger, paths []string) int {
 		purged++
 	}
 	return purged
+}
+
+// purgeTempRoot removes the entries of path one by one, checking ctx before
+// each, and then path itself.
+func purgeTempRoot(ctx context.Context, path string) error {
+	// If path is not a readable directory, RemoveAll below deals with it.
+	entries, _ := os.ReadDir(path)
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return os.RemoveAll(path)
 }

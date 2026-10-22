@@ -520,17 +520,18 @@ func envOrDefault(envName, defaultValue string) string {
 // that every temporary file and directory it creates, including those of the
 // Helm and Git libraries, lands in one place. Whatever a previous process
 // left there, because it exited without running its deferred cleanup, is
-// moved aside and returned for purgeStaleTempDirs to remove.
+// moved aside and returned for purgeStaleTempDirs to remove. A failure is
+// logged and leaves TMPDIR unchanged, so that it does not prevent startup.
 func setupTempRoot() []string {
 	root := filepath.Join(os.TempDir(), controllerName)
 	stale, err := util.PrepareTempRoot(root)
 	if err != nil {
-		setupLog.Error(err, "unable to set up tmp dir")
-		os.Exit(1)
+		setupLog.Error(err, "unable to set up tmp dir, stale tmp dirs will not be purged")
+		return nil
 	}
 	if err := os.Setenv("TMPDIR", root); err != nil {
-		setupLog.Error(err, "unable to set TMPDIR")
-		os.Exit(1)
+		setupLog.Error(err, "unable to set TMPDIR, stale tmp dirs will not be purged")
+		return nil
 	}
 	return stale
 }
