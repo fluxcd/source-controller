@@ -47,6 +47,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	cryptov1 "github.com/fluxcd/pkg/apis/crypto/v1"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
@@ -144,7 +145,11 @@ type OCIRepositoryReconciler struct {
 	ControllerName        string
 	TokenCache            *cache.TokenCache
 	CosignVerifierFactory *scosign.CosignVerifierFactory
-	requeueDependency     time.Duration
+	DefaultServiceAccount string
+
+	ObjectLevelWorkloadIdentity bool
+
+	requeueDependency time.Duration
 
 	patchOptions []patch.Option
 }
@@ -340,8 +345,64 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
-	// Generate the registry credential keychain either from static credentials or using cloud OIDC
-	keychain, err := r.keychain(ctx, obj)
+	provider := obj.GetProvider()
+
+	// Apply the default ServiceAccount when the object does not specify one, so
+	// that both the keychain and the auth library are aware of it.
+	saName := obj.Spec.ServiceAccountName
+	if saName == "" {
+		saName = r.DefaultServiceAccount
+	}
+
+	// Fetch the ServiceAccount once.
+	var sa *corev1.ServiceAccount
+	if saName != "" {
+		sa = &corev1.ServiceAccount{}
+		saRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: saName}
+		if err := r.Get(ctx, saRef, sa); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get service account '%s': %w", saRef, err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
+	// Build the authentication spec. BuildSpec is safe to call even when there
+	// is no ServiceAccount or provider-specific configuration: it returns a
+	// spec with a nil Auth in that case.
+	buildOpts := []cryptov1.Option{
+		cryptov1.WithServiceProvider(provider),
+		cryptov1.WithOCI(),
+	}
+	if sa != nil {
+		buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
+		if len(sa.ImagePullSecrets) > 0 {
+			buildOpts = append(buildOpts, cryptov1.WithImagePullSecrets())
+		}
+	}
+	if obj.Spec.CertSecretRef != nil {
+		buildOpts = append(buildOpts, cryptov1.WithCertSecretRef())
+	}
+	cryptoSpec, err := cryptov1.BuildSpec(buildOpts...)
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to validate configuration: %w", err),
+			sourcev1.AuthenticationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Generate the registry credential keychain either from static credentials
+	// or using cloud OIDC. The ServiceAccount is only used for its image pull
+	// secrets when it has any.
+	var keychainSA *corev1.ServiceAccount
+	if sa != nil && len(sa.ImagePullSecrets) > 0 {
+		keychainSA = sa
+	}
+	keychain, err := r.keychain(ctx, obj, keychainSA)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to get credential: %w", err),
@@ -368,40 +429,37 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 	}
 
-	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
-		opts := []auth.Option{
-			auth.WithClient(r.Client),
-			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	// Workload identity kicks in when the provider is not generic or
+	// the SA has opted into object-level workload identity.
+	if _, ok := keychain.(soci.Anonymous); ok && (provider != sourcev1.GenericOCIProvider || cryptoSpec.Auth.OptedIn()) {
+		// Check the object-level workload identity feature gate.
+		if sa != nil && !r.ObjectLevelWorkloadIdentity {
+			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+			err := fmt.Errorf(msgFmt, gate)
+			return sreconcile.ResultEmpty, serror.NewStalling(err, meta.FeatureGateDisabledReason)
 		}
 
-		if obj.Spec.ServiceAccountName != "" {
-			// Check object-level workload identity feature gate.
-			if !auth.IsObjectLevelWorkloadIdentityEnabled() {
-				const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-				const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-				err := fmt.Errorf(msgFmt, gate)
-				return sreconcile.ResultEmpty, serror.NewStalling(err, meta.FeatureGateDisabledReason)
-			}
-			// Set ServiceAccountName only if explicitly specified
-			opts = append(opts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
+		opts := auth.OptionsFromSpec(cryptoSpec.Auth)
+		opts = append(opts,
+			auth.WithClient(r.Client),
+			auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.OCIRepositoryKind, obj))
+		if sa != nil {
+			opts = append(opts, auth.WithServiceAccountName(sa.Name))
 		}
 		if r.TokenCache != nil {
-			involvedObject := cache.InvolvedObject{
-				Kind:      sourcev1.OCIRepositoryKind,
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
-				Operation: cache.OperationReconcile,
-			}
-			opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+			opts = append(opts,
+				auth.WithCache(*r.TokenCache),
+				auth.WithCacheOperation(cache.OperationReconcile))
 		}
 		if proxyURL != nil {
 			opts = append(opts, auth.WithProxyURL(*proxyURL))
 		}
 		var authErr error
-		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, opts...)
+		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, provider, opts...)
 		if authErr != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
+				fmt.Errorf("failed to get credential from %s: %w", provider, authErr),
 				sourcev1.AuthenticationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -1079,8 +1137,11 @@ func convertOCIToSemVerTag(ociTag, mediaType string) string {
 
 // keychain generates the credential keychain based on the resource
 // configuration. If no auth is specified a default keychain with
-// anonymous access is returned
-func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OCIRepository) (authn.Keychain, error) {
+// anonymous access is returned.
+//
+// The ServiceAccount is only used for its image pull secrets and must be
+// resolved and validated by the caller beforehand.
+func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OCIRepository, sa *corev1.ServiceAccount) (authn.Keychain, error) {
 	var imagePullSecrets []corev1.Secret
 
 	// lookup auth secret
@@ -1096,10 +1157,9 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		imagePullSecrets = append(imagePullSecrets, imagePullSecret)
 	}
 
-	// lookup service account
-	if obj.Spec.ServiceAccountName != "" {
-		saRef := types.NamespacedName{Namespace: obj.Namespace, Name: obj.Spec.ServiceAccountName}
-		saSecrets, err := secrets.PullSecretsFromServiceAccountRef(ctx, r.Client, saRef)
+	// lookup service account image pull secrets
+	if sa != nil {
+		saSecrets, err := secrets.PullSecretsFromServiceAccount(ctx, r.Client, sa)
 		if err != nil {
 			return nil, err
 		}

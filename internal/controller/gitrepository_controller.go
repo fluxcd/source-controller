@@ -49,6 +49,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	cryptov1 "github.com/fluxcd/pkg/apis/crypto/v1"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
@@ -66,7 +67,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
@@ -173,8 +173,11 @@ type GitRepositoryReconciler struct {
 	ControllerName string
 	TokenCache     *cache.TokenCache
 
+	DefaultServiceAccount string
+
+	ObjectLevelWorkloadIdentity bool
+
 	requeueDependency time.Duration
-	features          map[string]bool
 
 	patchOptions []patch.Option
 }
@@ -192,10 +195,6 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts GitRep
 	r.patchOptions = getPatchOptions(gitRepositoryReadyCondition.Owned, r.ControllerName)
 
 	r.requeueDependency = opts.DependencyRequeueInterval
-
-	if r.features == nil {
-		r.features = features.FeatureGates()
-	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
@@ -707,45 +706,92 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	}
 
 	// Configure provider authentication if specified.
+	provider := obj.GetProvider()
+	withCerts := len(opts.ClientCert) > 0 || len(opts.ClientKey) > 0 || len(opts.CAFile) > 0
+
+	// Check the object-level workload identity feature gate for the providers
+	// that use the ServiceAccount for authentication.
+	switch provider {
+	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
+		if obj.Spec.ServiceAccountName != "" && !r.ObjectLevelWorkloadIdentity {
+			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+			err := serror.NewStalling(fmt.Errorf(msgFmt, gate), meta.FeatureGateDisabledReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "%s", err)
+			return nil, err
+		}
+	}
+
+	// Resolve the ServiceAccount once, applying the default ServiceAccount when
+	// the object does not specify one.
+	saName := obj.Spec.ServiceAccountName
+	if saName == "" {
+		saName = r.DefaultServiceAccount
+	}
+	var sa *corev1.ServiceAccount
+	if saName != "" {
+		sa = &corev1.ServiceAccount{}
+		saRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: saName}
+		if err := r.Get(ctx, saRef, sa); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get service account '%s': %w", saRef, err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
+	}
+
+	// Build the authentication spec. This is done even when no
+	// ServiceAccount is specified, as some inputs are validated regardless.
+	var cryptoSpec *cryptov1.Spec
+	if sa != nil || (provider != "" && provider != sourcev1.GitProviderGeneric) {
+		buildOpts := []cryptov1.Option{
+			cryptov1.WithServiceProvider(provider),
+		}
+		if sa != nil {
+			buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
+		}
+		if withCerts {
+			buildOpts = append(buildOpts, cryptov1.WithSecretRefCerts())
+		}
+		if provider == sourcev1.GitProviderGitHub && len(authData[githubapp.KeyAppBaseURL]) > 0 {
+			buildOpts = append(buildOpts, cryptov1.WithGitHubEnterpriseServer())
+		}
+		var err error
+		cryptoSpec, err = cryptov1.BuildSpec(buildOpts...)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to validate configuration: %w", err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
+	}
+
 	var getCreds func() (*auth.GitCredentials, error)
-	switch provider := obj.GetProvider(); provider {
+	switch provider {
 	// If other providers (GCP, etc.) are added in the future they can be added here separated by a comma.
 	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
 		getCreds = func() (*auth.GitCredentials, error) {
-			opts := []auth.Option{
+			authOpts := auth.OptionsFromSpec(cryptoSpec.Auth)
+			authOpts = append(authOpts,
 				auth.WithClient(r.Client),
-				auth.WithServiceAccountNamespace(obj.GetNamespace()),
 				auth.WithGitURL(u),
+				auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.GitRepositoryKind, obj))
+			if sa != nil {
+				authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
 			}
-
-			if obj.Spec.ServiceAccountName != "" {
-				// Check object-level workload identity feature gate.
-				if !auth.IsObjectLevelWorkloadIdentityEnabled() {
-					const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-					const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-					err := serror.NewStalling(fmt.Errorf(msgFmt, gate), meta.FeatureGateDisabledReason)
-					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "%s", err)
-					return nil, err
-				}
-				// Set ServiceAccountName only if explicitly specified
-				opts = append(opts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
-			}
-
 			if r.TokenCache != nil {
-				involvedObject := cache.InvolvedObject{
-					Kind:      sourcev1.GitRepositoryKind,
-					Name:      obj.GetName(),
-					Namespace: obj.GetNamespace(),
-					Operation: cache.OperationReconcile,
-				}
-				opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+				authOpts = append(authOpts,
+					auth.WithCache(*r.TokenCache),
+					auth.WithCacheOperation(cache.OperationReconcile))
 			}
-
 			if proxyURL != nil {
-				opts = append(opts, auth.WithProxyURL(*proxyURL))
+				authOpts = append(authOpts, auth.WithProxyURL(*proxyURL))
 			}
-
-			return authutils.GetGitCredentials(ctx, provider, opts...)
+			return authutils.GetGitCredentials(ctx, provider, authOpts...)
 		}
 	case sourcev1.GitProviderGitHub:
 		// if provider is github, but secret ref is not specified
@@ -779,8 +825,12 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			}
 
 			if r.TokenCache != nil {
-				appOpts = append(appOpts, githubapp.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
-					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile))
+				appOpts = append(appOpts, githubapp.WithCache(r.TokenCache, cache.InvolvedObject{
+					Kind:      sourcev1.GitRepositoryKind,
+					Name:      obj.GetName(),
+					Namespace: obj.GetNamespace(),
+					Operation: cache.OperationReconcile,
+				}))
 			}
 
 			if authMethods.HasTLS() {

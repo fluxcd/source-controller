@@ -62,7 +62,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -1103,10 +1102,10 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 
 			obj := &sourcev1.GitRepository{}
 			r := &GitRepositoryReconciler{
-				Recorder:     events.NewFakeRecorder(32, false),
-				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Client:                      clientBuilder.Build(),
+				ObjectLevelWorkloadIdentity: false,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			url, err := url.Parse(tt.url)
@@ -1528,10 +1527,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			resetChmod(tt.dir, 0o750, 0o600)
 
 			r := &GitRepositoryReconciler{
-				Recorder:     events.NewFakeRecorder(32, false),
-				Storage:      testStorage,
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Storage:                     testStorage,
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1678,12 +1677,12 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:            clientBuilder.Build(),
-				Recorder:          events.NewFakeRecorder(32, false),
-				Storage:           storage,
-				requeueDependency: dependencyInterval,
-				features:          features.FeatureGates(),
-				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Client:                      clientBuilder.Build(),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Storage:                     storage,
+				requeueDependency:           dependencyInterval,
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1936,10 +1935,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.GitRepository{}).
 					Build(),
-				Recorder:     events.NewFakeRecorder(32, false),
-				Storage:      testStorage,
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Storage:                     testStorage,
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1990,10 +1989,10 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		Recorder:     events.NewFakeRecorder(32, false),
-		Storage:      testStorage,
-		features:     features.FeatureGates(),
-		patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+		Recorder:                    events.NewFakeRecorder(32, false),
+		Storage:                     testStorage,
+		ObjectLevelWorkloadIdentity: true,
+		patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -2782,10 +2781,10 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Recorder:     events.NewFakeRecorder(32, false),
-				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Client:                      clientBuilder.Build(),
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -2938,11 +2937,11 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				WithStatusSubresource(&sourcev1.GitRepository{})
 
 			r := &GitRepositoryReconciler{
-				Client:       clientBuilder.Build(),
-				Recorder:     events.NewFakeRecorder(32, false),
-				Storage:      testStorage,
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Client:                      clientBuilder.Build(),
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Storage:                     testStorage,
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -3346,9 +3345,9 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &GitRepositoryReconciler{
-				Recorder:     recorder,
-				features:     features.FeatureGates(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:                    recorder,
+				ObjectLevelWorkloadIdentity: true,
+				patchOptions:                getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)
 

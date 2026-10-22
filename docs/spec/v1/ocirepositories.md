@@ -116,9 +116,11 @@ Supported options are:
 - `azure`
 - `gcp`
 
-The `generic` provider can be used for public repositories or when
+The `generic` provider can be used for public repositories, when
 static credentials are used for authentication, either with
-`spec.secretRef` or `spec.serviceAccountName`.
+`spec.secretRef` or `spec.serviceAccountName`, or when a Kubernetes
+ServiceAccount token is used for object-level workload identity, as described
+in the [Service Account reference](#service-account-reference) section.
 If you do not specify `.spec.provider`, it defaults to `generic`.
 
 For a complete guide on how to set up authentication for cloud providers,
@@ -274,8 +276,10 @@ kubectl create secret docker-registry ...
 in the same namespace as OCIRepository with purpose depending on the value of
 the `.spec.provider` field:
 
-- When `.spec.provider` is set to `generic`, the controller will fetch the image
-  pull secrets attached to the Service Account and use them for authentication.
+- When `.spec.provider` is set to `generic`, the controller will use the image
+  pull secrets attached to the Service Account for static authentication, or
+  use the Service Account token for object-level workload identity when the
+  Service Account opts in with the credential annotations described below.
 - When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
   will be used for Workload Identity authentication. In this case, the controller
   feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
@@ -283,6 +287,70 @@ the `.spec.provider` field:
 
 **Note:** that for a publicly accessible image repository, you don't need to
 provide a `secretRef` nor `serviceAccountName`.
+
+#### Generic provider ServiceAccount tokens
+
+For the `generic` provider, the controller can authenticate to a registry
+using a short-lived Kubernetes ServiceAccount token. The token is presented
+to the registry as a bearer token by default, or as the password in basic
+authentication when `credential.auth.fluxcd.io/username` is set.
+
+The ServiceAccount must opt in with the following required annotations:
+
+- `credential.auth.fluxcd.io/provider`: must be set to `kubernetes`.
+- `credential.auth.fluxcd.io/type`: must be set to `jwt`.
+
+The following annotations are optional:
+
+- `credential.auth.fluxcd.io/audiences`: a comma or newline separated list of
+  token audiences. Defaults to the registry host derived from `.spec.url`.
+- `credential.auth.fluxcd.io/username`: the username to use when the registry
+  expects basic authentication. When unset, the token is sent as a bearer token.
+- `credential.auth.fluxcd.io/expiration`: the requested token expiration as a
+  Go duration, e.g. `10m`.
+
+A ServiceAccount that does not set both required annotations does not opt in
+and continues to use its `imagePullSecrets`, or anonymous access if it has none.
+Setting only one of the two required annotations is a configuration error. The
+credential annotations cannot be combined with `imagePullSecrets`.
+
+Object-level workload identity for the `generic` provider requires the
+`ObjectLevelWorkloadIdentity` feature gate to be enabled:
+
+```bash
+--feature-gates=ObjectLevelWorkloadIdentity=true
+```
+
+Example:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: app
+  namespace: apps
+spec:
+  interval: 5m
+  url: oci://registry.example.com/app
+  provider: generic
+  serviceAccountName: registry-puller
+  ref:
+    tag: latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-puller
+  namespace: apps
+  annotations:
+    credential.auth.fluxcd.io/provider: kubernetes
+    credential.auth.fluxcd.io/type: jwt
+    # Optional. Defaults to the registry host from .spec.url.
+    credential.auth.fluxcd.io/audiences: registry.example.com
+    # Optional. Use when the registry expects basic authentication.
+    credential.auth.fluxcd.io/username: flux
+```
 
 For a complete guide on how to set up authentication for cloud providers,
 see the integration [docs](/flux/integrations/).

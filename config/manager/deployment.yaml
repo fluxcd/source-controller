@@ -66,8 +66,8 @@ spec:
             path: /healthz
         readinessProbe:
           httpGet:
-            port: http
-            path: /
+            path: /readyz
+            port: healthz
         resources:
           limits:
             cpu: 1000m
