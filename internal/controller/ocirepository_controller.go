@@ -677,6 +677,23 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *sourcev1.OCIRepository, image
 		}
 	default:
 		layer = layers[0]
+		// Helm OCI charts may put the provenance file before the chart layer.
+		// When no explicit selector is configured, prefer the chart content
+		// layer in that case so extraction does not try to untar the .prov file.
+		if mediaType, err := layer.MediaType(); err != nil {
+			return nil, fmt.Errorf("failed to determine the media type of first layer from artifact: %w", err)
+		} else if string(mediaType) == "application/vnd.cncf.helm.chart.provenance.v1.prov" {
+			for i, candidate := range layers[1:] {
+				md, err := candidate.MediaType()
+				if err != nil {
+					return nil, fmt.Errorf("failed to determine the media type of layer[%v] from artifact: %w", i+1, err)
+				}
+				if string(md) == "application/vnd.cncf.helm.chart.content.v1.tar+gzip" {
+					layer = candidate
+					break
+				}
+			}
+		}
 	}
 
 	blob, err := layer.Compressed()
