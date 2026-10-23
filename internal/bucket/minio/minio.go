@@ -18,17 +18,23 @@ package minio
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
 	corev1 "k8s.io/api/core/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/auth"
 	awsauth "github.com/fluxcd/pkg/auth/aws"
@@ -330,10 +336,75 @@ func (c *MinioClient) FGetObject(ctx context.Context, bucketName, objectName, lo
 	if err = opts.SetMatchETag(stat.ETag); err != nil {
 		return "", err
 	}
-	if err = c.Client.FGetObject(ctx, bucketName, objectName, localPath, opts); err != nil {
+
+	st, err := os.Stat(localPath)
+	if err == nil {
+		if st.IsDir() {
+			return "", errors.New("fileName is a directory.")
+		}
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	objectDir, _ := filepath.Split(localPath)
+	if objectDir != "" {
+		if err = os.MkdirAll(objectDir, 0o700); err != nil {
+			return "", err
+		}
+	}
+
+	// GetObject, not Client.FGetObject: minio-go v7.2.1 leaves the GET body open.
+	object, err := c.Client.GetObject(ctx, bucketName, objectName, opts)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cerr := object.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close object reader")
+		}
+	}()
+
+	partPath := partFilePath(localPath, stat.ETag)
+	f, err := os.OpenFile(partPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return "", err
+	}
+	discardPart := func(copyErr error) (string, error) {
+		if cerr := f.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close file")
+		}
+		if rerr := os.Remove(partPath); rerr != nil && !os.IsNotExist(rerr) {
+			ctrl.LoggerFrom(ctx).Error(rerr, "failed to remove partial download")
+		}
+		return "", copyErr
+	}
+
+	n, err := io.Copy(f, object)
+	if err != nil {
+		return discardPart(err)
+	}
+	if n != stat.Size {
+		return discardPart(fmt.Errorf("downloaded %d bytes from object %q, stat size is %d", n, objectName, stat.Size))
+	}
+	if err = f.Close(); err != nil {
+		if rerr := os.Remove(partPath); rerr != nil && !os.IsNotExist(rerr) {
+			ctrl.LoggerFrom(ctx).Error(rerr, "failed to remove partial download")
+		}
+		return "", err
+	}
+	if err = os.Rename(partPath, localPath); err != nil {
+		if rerr := os.Remove(partPath); rerr != nil && !os.IsNotExist(rerr) {
+			ctrl.LoggerFrom(ctx).Error(rerr, "failed to remove partial download")
+		}
 		return "", err
 	}
 	return stat.ETag, nil
+}
+
+// Hashed like minio-go so "<base>.part.minio" can be a different object key.
+func partFilePath(localPath, etag string) string {
+	sum := sha256.Sum256([]byte(filepath.Base(localPath) + etag))
+	name := hex.EncodeToString(sum[:]) + ".part.minio"
+	return filepath.Join(filepath.Dir(localPath), name)
 }
 
 // VisitObjects iterates over the items in the provided object storage

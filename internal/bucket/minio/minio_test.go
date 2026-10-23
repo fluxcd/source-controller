@@ -17,12 +17,14 @@ limitations under the License.
 package minio
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -30,11 +32,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -311,6 +317,122 @@ func TestFGetObject(t *testing.T) {
 	_, err := testMinioClient.FGetObject(ctx, bucketName, objectName, path)
 	g := NewWithT(t)
 	g.Expect(err).NotTo(HaveOccurred())
+}
+
+type closeTrackTransport struct {
+	closed *atomic.Bool
+}
+
+func (t *closeTrackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil || req.Method != http.MethodGet {
+		return resp, err
+	}
+	resp.Body = &closeTrackBody{ReadCloser: resp.Body, closed: t.closed}
+	return resp, nil
+}
+
+type closeTrackBody struct {
+	io.ReadCloser
+	closed *atomic.Bool
+}
+
+func (b *closeTrackBody) Close() error {
+	b.closed.Store(true)
+	return b.ReadCloser.Close()
+}
+
+func newTrackingMinioClient(t *testing.T, handler http.Handler, closed *atomic.Bool) *MinioClient {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	mc, err := miniogo.New(strings.TrimPrefix(srv.URL, "http://"), &miniogo.Options{
+		Creds:     credentials.NewStaticV4("fluxcd", "passw0rd!", ""),
+		Secure:    false,
+		Region:    "us-east-1",
+		Transport: &closeTrackTransport{closed: closed},
+	})
+	NewWithT(t).Expect(err).NotTo(HaveOccurred())
+	return &MinioClient{Client: mc}
+}
+
+func s3ObjectHandler(payload []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.Header().Set("ETag", `"abc123"`)
+		w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+		if r.Method == http.MethodGet {
+			_, _ = w.Write(payload)
+		}
+	}
+}
+
+func TestMinioClient_FGetObject_ClosesResponseBody(t *testing.T) {
+	payload := bytes.Repeat([]byte("flux"), 30000)
+	var closed atomic.Bool
+	var ifMatch atomic.Value
+	dir := t.TempDir()
+	partDir := filepath.Join(dir, "nested")
+	var partMu sync.Mutex
+	var partNames []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			ifMatch.Store(r.Header.Get("If-Match"))
+			matches, _ := filepath.Glob(filepath.Join(partDir, "*.part.minio"))
+			partMu.Lock()
+			partNames = append(partNames, matches...)
+			partMu.Unlock()
+		}
+		s3ObjectHandler(payload)(w, r)
+	})
+	client := newTrackingMinioClient(t, handler, &closed)
+
+	path := filepath.Join(partDir, "obj")
+	etag, err := client.FGetObject(context.Background(), "test-bucket", "obj", path)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(etag).To(Equal("abc123"))
+	g.Expect(ifMatch.Load()).To(Equal(`"abc123"`))
+	got, err := os.ReadFile(path)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(payload))
+	partMu.Lock()
+	seenParts := append([]string(nil), partNames...)
+	partMu.Unlock()
+	g.Expect(seenParts).NotTo(BeEmpty())
+	for _, name := range seenParts {
+		g.Expect(filepath.Base(name)).NotTo(Equal("obj.part.minio"))
+	}
+	matches, globErr := filepath.Glob(filepath.Join(partDir, "*.part.minio"))
+	g.Expect(globErr).NotTo(HaveOccurred())
+	g.Expect(matches).To(BeEmpty())
+	g.Eventually(closed.Load, 2*time.Second, 10*time.Millisecond).Should(BeTrue())
+}
+
+func TestMinioClient_FGetObject_CopyError(t *testing.T) {
+	var closed atomic.Bool
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.Header().Set("ETag", `"abc123"`)
+		w.Header().Set("Content-Length", "64")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte("short"))
+		}
+	})
+	client := newTrackingMinioClient(t, handler, &closed)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "obj")
+	_, err := client.FGetObject(context.Background(), "test-bucket", "obj", path)
+	g := NewWithT(t)
+	g.Expect(err).To(HaveOccurred())
+	_, statErr := os.Stat(path)
+	g.Expect(os.IsNotExist(statErr)).To(BeTrue())
+	matches, globErr := filepath.Glob(filepath.Join(dir, "*.part.minio"))
+	g.Expect(globErr).NotTo(HaveOccurred())
+	g.Expect(matches).To(BeEmpty())
+	g.Eventually(closed.Load, 2*time.Second, 10*time.Millisecond).Should(BeTrue())
 }
 
 func TestFGetObjectInvalidCredentials(t *testing.T) {
