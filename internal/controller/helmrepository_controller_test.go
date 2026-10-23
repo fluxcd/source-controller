@@ -1157,10 +1157,37 @@ func TestHelmRepositoryReconciler_reconcileSource_cachedIndexFile(t *testing.T) 
 		got, err := newReconciler(g, c).reconcileSource(context.TODO(), patch.NewSerialPatcher(obj, c), obj, &meta.Artifact{}, &chartRepo)
 
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("failed to load Helm repository from index YAML"))
+		g.Expect(err.Error()).To(ContainSubstring("failed to load Helm repository from index YAML at " + server.URL() + ":"))
 		g.Expect(got).To(Equal(sreconcile.ResultEmpty))
 		g.Expect(conditions.IsTrue(obj, sourcev1.FetchFailedCondition)).To(BeTrue())
+		g.Expect(conditions.GetMessage(obj, sourcev1.FetchFailedCondition)).To(ContainSubstring("failed to load Helm repository from index YAML at " + server.URL() + ":"))
 		g.Expect(chartIndexFiles(g, dir)).To(BeEmpty())
+	})
+
+	t.Run("invalid index message redacts credentials in the URL", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+		t.Setenv("TMPDIR", dir)
+
+		server := startServer(g, []byte("{}\n"))
+		defer server.Stop()
+		defer os.RemoveAll(server.Root())
+
+		c := fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build()
+		obj := newObject(strings.Replace(server.URL(), "http://", "http://user:s3cr3t@", 1))
+		g.Expect(c.Create(context.TODO(), obj)).To(Succeed())
+
+		var chartRepo repository.ChartRepository
+		_, err := newReconciler(g, c).reconcileSource(context.TODO(), patch.NewSerialPatcher(obj, c), obj, &meta.Artifact{}, &chartRepo)
+
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to load Helm repository from index YAML at"))
+		g.Expect(err.Error()).To(ContainSubstring("user:xxxxx@"))
+		g.Expect(err.Error()).ToNot(ContainSubstring("s3cr3t"))
+		g.Expect(conditions.GetMessage(obj, sourcev1.FetchFailedCondition)).ToNot(ContainSubstring("s3cr3t"))
 	})
 
 	t.Run("status patch failure removes cached file", func(t *testing.T) {

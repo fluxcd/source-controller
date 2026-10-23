@@ -488,7 +488,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromPath(); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
+			fmt.Errorf("failed to load Helm repository from index YAML at %s: %w", redactURL(obj.Spec.URL), err),
 			sourcev1.IndexationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -731,4 +731,14 @@ func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *pa
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// redactURL returns the given URL with the password of its user info
+// replaced, so it can be added to conditions and events.
+func redactURL(repoURL string) string {
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "<invalid URL>"
+	}
+	return u.Redacted()
 }
