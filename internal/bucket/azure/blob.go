@@ -311,6 +311,11 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if cerr := res.Body.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close object reader")
+		}
+	}()
 
 	// Prepare target file.
 	f, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0o600)
@@ -326,8 +331,8 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	// Off we go.
 	mw := io.MultiWriter(f, hash)
 	if _, err = io.Copy(mw, res.Body); err != nil {
-		if err = f.Close(); err != nil {
-			ctrl.LoggerFrom(ctx).Error(err, "failed to close file after copy error")
+		if cerr := f.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close file after copy error")
 		}
 		return "", err
 	}

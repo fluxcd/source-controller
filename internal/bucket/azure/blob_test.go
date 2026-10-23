@@ -25,6 +25,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -669,6 +670,90 @@ func TestBlobClient_FGetObject_MissingEtag(t *testing.T) {
 	g.Expect(os.ReadFile(localPath)).To(BeEquivalentTo("file contents"))
 }
 
+// A short response body makes io.Copy fail after some bytes are written.
+// Closing that file succeeds, and the close must not replace the copy error.
+func TestBlobClient_FGetObject_CopyError(t *testing.T) {
+	g := NewWithT(t)
+
+	bucketName := "test-bucket"
+	objectName := "file.txt"
+
+	bucketListener, bucketAddr, _ := testlistener.New(t)
+	bucketEndpoint := fmt.Sprintf("http://%s", bucketAddr)
+	bucketHandler := http.NewServeMux()
+	bucketHandler.HandleFunc(fmt.Sprintf("GET /%s/%s", bucketName, objectName), func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		g.Expect(ok).To(BeTrue())
+		conn, bufrw, err := hj.Hijack()
+		g.Expect(err).ToNot(HaveOccurred())
+		_, err = bufrw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 64\r\nETag: \"abc\"\r\n\r\npartial")
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(bufrw.Flush()).To(Succeed())
+		g.Expect(conn.Close()).To(Succeed())
+	})
+	bucketServer := &http.Server{
+		Addr:    bucketAddr,
+		Handler: bucketHandler,
+	}
+	go bucketServer.Serve(bucketListener)
+	defer bucketServer.Shutdown(context.Background())
+
+	bucket := &sourcev1.Bucket{
+		Spec: sourcev1.BucketSpec{
+			Endpoint: bucketEndpoint,
+		},
+	}
+	client, err := NewClient(t.Context(),
+		bucket,
+		withoutCredentials(),
+		withoutRetries())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	localPath := filepath.Join(t.TempDir(), objectName)
+	_, err = client.FGetObject(t.Context(), bucketName, objectName, localPath)
+	g.Expect(err).To(HaveOccurred())
+}
+
+// The Get Blob response body must be closed so the connection can be reused.
+func TestBlobClient_FGetObject_ClosesResponseBody(t *testing.T) {
+	g := NewWithT(t)
+
+	bucketName := "test-bucket"
+	objectName := "file.txt"
+
+	bucketListener, bucketAddr, _ := testlistener.New(t)
+	bucketEndpoint := fmt.Sprintf("http://%s", bucketAddr)
+	bucketHandler := http.NewServeMux()
+	bucketHandler.HandleFunc(fmt.Sprintf("GET /%s/%s", bucketName, objectName), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"abc"`)
+		_, err := w.Write([]byte("file contents"))
+		g.Expect(err).ToNot(HaveOccurred())
+	})
+	bucketServer := &http.Server{
+		Addr:    bucketAddr,
+		Handler: bucketHandler,
+	}
+	go bucketServer.Serve(bucketListener)
+	defer bucketServer.Shutdown(context.Background())
+
+	tracker := &bodyCloseTracker{base: http.DefaultTransport}
+	clientOpts := &azblob.ClientOptions{}
+	clientOpts.Transport = &http.Client{Transport: tracker}
+	clientOpts.Retry.ShouldRetry = func(*http.Response, error) bool {
+		return false
+	}
+	raw, err := azblob.NewClientWithNoCredential(bucketEndpoint, clientOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	client := &BlobClient{Client: raw}
+
+	localPath := filepath.Join(t.TempDir(), objectName)
+	etag, err := client.FGetObject(t.Context(), bucketName, objectName, localPath)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(etag).To(Equal(`"abc"`))
+	g.Expect(os.ReadFile(localPath)).To(BeEquivalentTo("file contents"))
+	g.Expect(tracker.closed).To(BeTrue())
+}
+
 func TestBlobClient_VisitObjects_MissingFields(t *testing.T) {
 	g := NewWithT(t)
 
@@ -778,6 +863,32 @@ func Test_extractAccountNameFromEndpoint1(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 		})
 	}
+}
+
+// bodyCloseTracker records whether the response body from a blob
+// download was closed.
+type bodyCloseTracker struct {
+	base   http.RoundTripper
+	closed bool
+}
+
+func (b *bodyCloseTracker) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := b.base.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil {
+		return resp, err
+	}
+	resp.Body = &closeNotifier{ReadCloser: resp.Body, onClose: func() { b.closed = true }}
+	return resp, nil
+}
+
+type closeNotifier struct {
+	io.ReadCloser
+	onClose func()
+}
+
+func (c *closeNotifier) Close() error {
+	c.onClose()
+	return c.ReadCloser.Close()
 }
 
 func endpointURL(accountName string) string {
