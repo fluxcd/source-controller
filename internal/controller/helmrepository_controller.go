@@ -461,6 +461,13 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 	*chartRepo = *newChartRepo
 
+	// reconcileArtifact removes this file. Error returns never reach it.
+	removeCachedIndex := func() {
+		if err := chartRepo.Clear(); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary cached index file")
+		}
+	}
+
 	// Early comparison to current Artifact.
 	if curArtifact := obj.GetArtifact(); curArtifact != nil {
 		curRev := digest.Digest(curArtifact.Revision)
@@ -477,6 +484,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromPath(); err != nil {
+		removeCachedIndex()
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
 			sourcev1.IndexationFailedReason,
@@ -490,6 +498,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Calculate revision.
 	revision := chartRepo.Digest(intdigest.Canonical)
 	if revision.Validate() != nil {
+		removeCachedIndex()
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to calculate revision: %w", err),
 			sourcev1.IndexationFailedReason,
@@ -505,6 +514,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 	rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
 	if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+		removeCachedIndex()
 		return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 	}
 

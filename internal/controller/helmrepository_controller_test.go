@@ -38,6 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
@@ -1087,6 +1088,136 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
+}
+
+func TestHelmRepositoryReconciler_reconcileSource_cachedIndexFile(t *testing.T) {
+	newReconciler := func(g *WithT, c client.Client) *HelmRepositoryReconciler {
+		return &HelmRepositoryReconciler{
+			Recorder:     events.NewFakeRecorder(32, false),
+			Client:       c,
+			Storage:      testStorage,
+			Getters:      testGetters,
+			patchOptions: getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
+		}
+	}
+
+	startServer := func(g *WithT, index []byte) *helmtestserver.HelmServer {
+		server, err := helmtestserver.NewTempHelmServer()
+		g.Expect(err).NotTo(HaveOccurred())
+		if index == nil {
+			g.Expect(server.PackageChart("testdata/charts/helmchart")).To(Succeed())
+			g.Expect(server.GenerateIndex()).To(Succeed())
+		} else {
+			g.Expect(os.WriteFile(filepath.Join(server.Root(), "index.yaml"), index, 0o600)).To(Succeed())
+		}
+		server.Start()
+		return server
+	}
+
+	newObject := func(url string) *sourcev1.HelmRepository {
+		return &sourcev1.HelmRepository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "index-cache",
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec: sourcev1.HelmRepositorySpec{
+				Interval: metav1.Duration{Duration: interval},
+				Timeout:  &metav1.Duration{Duration: timeout},
+				URL:      url,
+			},
+		}
+	}
+
+	chartIndexFiles := func(g *WithT, dir string) []string {
+		matches, err := filepath.Glob(filepath.Join(dir, "chart-index-*.yaml"))
+		g.Expect(err).NotTo(HaveOccurred())
+		return matches
+	}
+
+	t.Run("invalid index removes cached file", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+		t.Setenv("TMPDIR", dir)
+
+		// HTTP 200 with a body that is not a Helm index. Download succeeds
+		// and LoadFromPath fails.
+		server := startServer(g, []byte("{}\n"))
+		defer server.Stop()
+		defer os.RemoveAll(server.Root())
+
+		c := fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build()
+		obj := newObject(server.URL())
+		g.Expect(c.Create(context.TODO(), obj)).To(Succeed())
+
+		var chartRepo repository.ChartRepository
+		got, err := newReconciler(g, c).reconcileSource(context.TODO(), patch.NewSerialPatcher(obj, c), obj, &meta.Artifact{}, &chartRepo)
+
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to load Helm repository from index YAML"))
+		g.Expect(got).To(Equal(sreconcile.ResultEmpty))
+		g.Expect(conditions.IsTrue(obj, sourcev1.FetchFailedCondition)).To(BeTrue())
+		g.Expect(chartIndexFiles(g, dir)).To(BeEmpty())
+	})
+
+	t.Run("status patch failure removes cached file", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+		t.Setenv("TMPDIR", dir)
+
+		server := startServer(g, nil)
+		defer server.Stop()
+		defer os.RemoveAll(server.Root())
+
+		base := fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build()
+		c := interceptor.NewClient(base, interceptor.Funcs{
+			SubResourcePatch: func(context.Context, client.Client, string, client.Object, client.Patch, ...client.SubResourcePatchOption) error {
+				return errors.New("injected patch failure")
+			},
+		})
+		obj := newObject(server.URL())
+		g.Expect(c.Create(context.TODO(), obj)).To(Succeed())
+
+		var chartRepo repository.ChartRepository
+		got, err := newReconciler(g, c).reconcileSource(context.TODO(), patch.NewSerialPatcher(obj, c), obj, &meta.Artifact{}, &chartRepo)
+
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("injected patch failure"))
+		g.Expect(got).To(Equal(sreconcile.ResultEmpty))
+		g.Expect(chartIndexFiles(g, dir)).To(BeEmpty())
+	})
+
+	t.Run("successful fetch keeps cached file", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+		t.Setenv("TMPDIR", dir)
+
+		server := startServer(g, nil)
+		defer server.Stop()
+		defer os.RemoveAll(server.Root())
+
+		c := fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build()
+		obj := newObject(server.URL())
+		g.Expect(c.Create(context.TODO(), obj)).To(Succeed())
+
+		var chartRepo repository.ChartRepository
+		got, err := newReconciler(g, c).reconcileSource(context.TODO(), patch.NewSerialPatcher(obj, c), obj, &meta.Artifact{}, &chartRepo)
+		defer os.Remove(chartRepo.Path)
+
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(got).To(Equal(sreconcile.ResultSuccess))
+		matches := chartIndexFiles(g, dir)
+		g.Expect(matches).To(Equal([]string{chartRepo.Path}))
+	})
 }
 
 func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
