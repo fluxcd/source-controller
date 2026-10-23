@@ -2,6 +2,131 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.10.0
+
+**Release date:** 2026-10-23
+
+This minor release graduates object-level Workload Identity, adds short-lived
+credentials from Kubernetes ServiceAccount tokens and SPIFFE, and introduces
+GitHub App Client ID support and structured exported inputs for ExternalArtifact.
+
+⚠️ **Breaking change:** the `ObjectLevelWorkloadIdentity` feature gate is
+retired, and the default Flux RBAC no longer grants the `create` verb on
+`serviceaccounts/token`. Object-level workload identity is now always enabled,
+but it stops working unless you bind a ClusterRole with that permission to the
+source-controller ServiceAccount. See
+[fluxcd/flux2#6139](https://github.com/fluxcd/flux2/pull/6139) for the required
+ClusterRole and ClusterRoleBinding.
+
+### Workload Identity
+
+Object-level workload identity no longer requires the
+`ObjectLevelWorkloadIdentity` feature gate. The gate was a controller-wide
+setting, so retiring it affects every source API: `GitRepository`,
+`OCIRepository` and `Bucket` now use ServiceAccount-based workload identity
+without it.
+
+Credentials can come from two credential providers, selected independently of
+the service provider in `.spec.provider`:
+
+- `kubernetes`: a short-lived JWT from the Kubernetes TokenRequest API, with the
+  identity `system:serviceaccount:<namespace>:<name>`.
+- `spiffe`: a JWT-SVID from the SPIFFE Broker API, with the identity determined
+  by the SPIFFE runtime.
+
+The credential provider is configured on the ServiceAccount with
+`credential.auth.fluxcd.io/provider` and `credential.auth.fluxcd.io/type`. The
+service provider (`aws`, `azure`, `gcp` or `generic`) decides what the
+credential is used for: exchanged for cloud credentials, or sent directly to the
+service.
+
+The `generic` OCI provider now supports object-level workload identity on
+`OCIRepository`: the JWT or JWT-SVID is sent as a bearer token, or as the
+password in HTTP basic authentication when
+`credential.auth.fluxcd.io/username` is set. Audiences default to the registry
+host and can be overridden with `credential.auth.fluxcd.io/audiences`. The AWS,
+Azure and GCP providers accept either credential provider.
+
+Using the `spiffe` credential provider requires `SPIFFE_ENDPOINT_SOCKET`, the
+`--spiffe-broker-endpoint` and `--spiffe-broker-id` flags, and a SPIFFE Broker
+authorized to issue SVIDs for Flux objects. The `kubernetes` credential provider
+requires RBAC permission to create `serviceaccounts/token`.
+
+### Inter-controller mTLS
+
+The artifact server can require SPIFFE mTLS with the repeatable
+`--authorized-artifact-client-spiffe-id` flag, authorizing the SPIFFE IDs of
+kustomize-controller, helm-controller, source-watcher and any other source
+controller that pulls artifacts. The event recorder can send events to
+notification-controller over SPIFFE mTLS with the repeatable
+`--authorized-event-server-spiffe-id` flag.
+
+Each traffic type is protected independently, and artifact URLs in status are
+unchanged: clients force HTTPS in memory instead. Flag values accept an exact
+SPIFFE ID, an ID prefix ending in `/`, a whole trust domain, or the `self` trust
+domain.
+
+### GitRepository
+
+GitHub App authentication accepts a Client ID as an alternative to the numeric
+App ID (`githubAppClientID`). Signature verification is re-run when the trusted
+keys rotate, so a revoked or replaced key no longer leaves a stale
+`SourceVerified=True` condition.
+
+### OCIRepository
+
+Signature verification is re-run when the verification keys rotate, and the
+origin revision from OCI image metadata is forwarded in events.
+
+### ExternalArtifact
+
+A new `.status.exportedInputs` field exposes structured data extracted from the
+source resource, for consumers such as ResourceSet to implement templating.
+
+### General updates
+
+The controller is built with Kubernetes 1.37 and Go 1.27.
+
+Fixes:
+- Close GCP object streams on error paths
+  [#2053](https://github.com/fluxcd/source-controller/pull/2053)
+- Close Azure blob streams on error paths
+  [#2200](https://github.com/fluxcd/source-controller/pull/2200)
+- Remove leaked Helm index cache on reconcile errors
+  [#2201](https://github.com/fluxcd/source-controller/pull/2201)
+  [#2202](https://github.com/fluxcd/source-controller/pull/2202)
+- Purge stale temp dirs at startup
+  [#2176](https://github.com/fluxcd/source-controller/pull/2176)
+- Include the repository URL in Helm index parse errors
+  [#2063](https://github.com/fluxcd/source-controller/pull/2063)
+- Support the AWS `ap-southeast-6` region for Bucket sources
+  [#2183](https://github.com/fluxcd/source-controller/pull/2183)
+
+Improvements:
+- Support Kubernetes ServiceAccount tokens for `generic` OCI repositories
+  [#2192](https://github.com/fluxcd/source-controller/pull/2192)
+- Add the `spiffe` credential provider and SPIFFE Broker API
+  [#2197](https://github.com/fluxcd/source-controller/pull/2197)
+- Retire the `ObjectLevelWorkloadIdentity` feature gate
+  [#2197](https://github.com/fluxcd/source-controller/pull/2197)
+- Add SPIFFE mTLS between the controllers
+  [#2194](https://github.com/fluxcd/source-controller/pull/2194)
+- Add GitHub App Client ID support
+  [#2168](https://github.com/fluxcd/source-controller/pull/2168)
+- Reverify sources when verification keys rotate
+  [#2166](https://github.com/fluxcd/source-controller/pull/2166)
+  [#2179](https://github.com/fluxcd/source-controller/pull/2179)
+- Expose the OCI origin revision in events
+  [#2127](https://github.com/fluxcd/source-controller/pull/2127)
+- Add ExternalArtifact exported inputs
+  [#2182](https://github.com/fluxcd/source-controller/pull/2182)
+- Update to Kubernetes 1.37 and Go 1.27
+  [#2162](https://github.com/fluxcd/source-controller/pull/2162)
+  [#2186](https://github.com/fluxcd/source-controller/pull/2186)
+- Various dependency updates
+  [#2100](https://github.com/fluxcd/source-controller/pull/2100)
+  [#2203](https://github.com/fluxcd/source-controller/pull/2203)
+
 ## 1.9.6
 
 **Release date:** 2026-10-01
