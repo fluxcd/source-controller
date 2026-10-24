@@ -23,7 +23,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -45,10 +44,8 @@ func TestReadTrustedRootFromSecret(t *testing.T) {
 			namespace: "default",
 			ref:       &meta.LocalObjectReference{Name: "sigstore-root"},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sigstore-root",
-					Namespace: "default",
-				},
+				Name:      "sigstore-root",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"trusted_root.json": []byte(`{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`),
 				},
@@ -66,10 +63,8 @@ func TestReadTrustedRootFromSecret(t *testing.T) {
 			namespace: "default",
 			ref:       &meta.LocalObjectReference{Name: "no-key-secret"},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "no-key-secret",
-					Namespace: "default",
-				},
+				Name:      "no-key-secret",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"other-key": []byte("data"),
 				},
