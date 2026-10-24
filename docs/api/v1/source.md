@@ -191,8 +191,8 @@ string
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
-For more information about workload identity:
-<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
+For more information about object identity:
+<a href="https://fluxcd.io/flux/integrations/object-identity/">https://fluxcd.io/flux/integrations/object-identity/</a></p>
 </td>
 </tr>
 <tr>
@@ -1198,7 +1198,11 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-the image pull if the service account has attached pull secrets. For more information:
+the image pull, either with the pull secrets attached to the service account or with
+an object identity.
+For more information about object identity:
+<a href="https://fluxcd.io/flux/integrations/object-identity/">https://fluxcd.io/flux/integrations/object-identity/</a>
+For more information about image pull secrets:
 <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
 </td>
 </tr>
@@ -1555,8 +1559,8 @@ string
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
-For more information about workload identity:
-<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
+For more information about object identity:
+<a href="https://fluxcd.io/flux/integrations/object-identity/">https://fluxcd.io/flux/integrations/object-identity/</a></p>
 </td>
 </tr>
 <tr>
@@ -3471,7 +3475,11 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-the image pull if the service account has attached pull secrets. For more information:
+the image pull, either with the pull secrets attached to the service account or with
+an object identity.
+For more information about object identity:
+<a href="https://fluxcd.io/flux/integrations/object-identity/">https://fluxcd.io/flux/integrations/object-identity/</a>
+For more information about image pull secrets:
 <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
 </td>
 </tr>

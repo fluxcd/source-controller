@@ -90,7 +90,11 @@ type OCIRepositorySpec struct {
 	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
 
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-	// the image pull if the service account has attached pull secrets. For more information:
+	// the image pull, either with the pull secrets attached to the service account or with
+	// an object identity.
+	// For more information about object identity:
+	// https://fluxcd.io/flux/integrations/object-identity/
+	// For more information about image pull secrets:
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`

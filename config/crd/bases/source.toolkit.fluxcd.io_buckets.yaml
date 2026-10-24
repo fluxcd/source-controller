@@ -151,8 +151,8 @@ spec:
                 description: |-
                   ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
                   the bucket. This field is only supported for the 'gcp' and 'aws' providers.
-                  For more information about workload identity:
-                  https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                  For more information about object identity:
+                  https://fluxcd.io/flux/integrations/object-identity/
                 type: string
               sts:
                 description: |-
