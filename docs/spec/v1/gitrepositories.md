@@ -308,7 +308,7 @@ For a full list of available regions and their endpoints, see the
     spec:
       interval: 5m0s
       provider: aws
-      serviceAccountName: my-tenant # optional (used for object-level workload identity)
+      serviceAccountName: my-tenant # optional (used for object identity)
       url: https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>
       ref:
         branch: main
@@ -465,13 +465,12 @@ in the same namespace as GitRepository with purpose depending on the value of
 the `.spec.provider` field:
 
 - When `.spec.provider` is set to `azure`, the Service Account
-  will be used for Workload Identity authentication. For Azure DevOps specific setup, see the
+  will be used to acquire an object identity. For Azure DevOps specific setup, see the
   [Azure DevOps integration guide](https://fluxcd.io/flux/integrations/azure/#for-azure-devops).
 
-For a complete guide to the ServiceAccount annotations used for object-level
-workload identity, including the `spiffe` credential provider, see the
-[ServiceAccount annotations](/flux/integrations/serviceaccount-annotations)
-docs.
+For a complete guide to the ServiceAccount annotations used for object
+identity, including the `spiffe` credential provider, see the
+[Object Identity](/flux/integrations/object-identity/) docs.
 
 **Note:** that for a publicly accessible git repository, you don't need to
 provide a `secretRef` nor `serviceAccountName`.
