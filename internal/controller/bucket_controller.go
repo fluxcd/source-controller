@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	cryptov1 "github.com/fluxcd/pkg/apis/crypto/v1"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
@@ -56,6 +57,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/bucket/azure"
@@ -131,6 +133,9 @@ type BucketReconciler struct {
 	Storage        *storage.Storage
 	ControllerName string
 	TokenCache     *cache.TokenCache
+
+	DefaultServiceAccount string
+	SPIFFEBroker          fluxbroker.Interface
 
 	patchOptions []patch.Option
 }
@@ -433,18 +438,6 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.ServiceAccountName != ""
-	if usesObjectLevelWorkloadIdentity {
-		if !auth.IsObjectLevelWorkloadIdentityEnabled() {
-			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-			err := fmt.Errorf(msgFmt, gate)
-			e := serror.NewStalling(err, meta.FeatureGateDisabledReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	}
-
 	creds, err := r.setupCredentials(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
@@ -454,12 +447,10 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 	provider, err := r.createBucketProvider(ctx, obj, creds)
 	if err != nil {
-		var stallingErr *serror.Stalling
-		var genericErr *serror.Generic
-		if errors.As(err, &stallingErr) {
+		if stallingErr, ok := errors.AsType[*serror.Stalling](err); ok {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stallingErr.Reason, "%s", stallingErr)
 			return sreconcile.ResultEmpty, stallingErr
-		} else if errors.As(err, &genericErr) {
+		} else if genericErr, ok := errors.AsType[*serror.Generic](err); ok {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, genericErr.Reason, "%s", genericErr)
 			return sreconcile.ResultEmpty, genericErr
 		} else {
@@ -839,35 +830,79 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 // createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
 // It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
 func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
-	authOpts := []auth.Option{
-		auth.WithClient(r.Client),
-		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	// Determine the cryptov1 service provider and resolve the ServiceAccount
+	// once, applying the default ServiceAccount when the object does not
+	// specify one. The generic provider does not support a ServiceAccount.
+	var serviceProvider string
+	switch obj.Spec.Provider {
+	case sourcev1.BucketProviderAmazon:
+		serviceProvider = cryptov1.ProviderAWS
+	case sourcev1.BucketProviderGoogle:
+		serviceProvider = cryptov1.ProviderGCP
+	case sourcev1.BucketProviderAzure:
+		serviceProvider = cryptov1.ProviderAzure
 	}
 
-	if obj.Spec.ServiceAccountName != "" {
-		authOpts = append(authOpts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
-	}
-
-	if r.TokenCache != nil {
-		involvedObject := cache.InvolvedObject{
-			Kind:      sourcev1.BucketKind,
-			Name:      obj.GetName(),
-			Namespace: obj.GetNamespace(),
-			Operation: cache.OperationReconcile,
+	var sa *corev1.ServiceAccount
+	if serviceProvider != "" {
+		saName := obj.Spec.ServiceAccountName
+		if saName == "" {
+			saName = r.DefaultServiceAccount
 		}
-		authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
+		if saName != "" {
+			sa = &corev1.ServiceAccount{}
+			saRef := client.ObjectKey{Namespace: obj.GetNamespace(), Name: saName}
+			if err := r.Get(ctx, saRef, sa); err != nil {
+				return nil, fmt.Errorf("failed to get service account '%s': %w", saRef, err)
+			}
+		}
 	}
 
+	var cryptoSpec *cryptov1.Spec
+	if sa != nil {
+		buildOpts := []cryptov1.Option{
+			cryptov1.WithAnnotations(sa.Annotations),
+			cryptov1.WithServiceProvider(serviceProvider),
+		}
+		if sts := obj.Spec.STS; sts != nil {
+			buildOpts = append(buildOpts, cryptov1.WithSTSEndpoint(sts.Provider, sts.Endpoint))
+		}
+		if obj.Spec.CertSecretRef != nil ||
+			(obj.Spec.STS != nil && obj.Spec.STS.CertSecretRef != nil) {
+			buildOpts = append(buildOpts, cryptov1.WithCertSecretRef())
+		}
+		var err error
+		cryptoSpec, err = cryptov1.BuildSpec(buildOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build spec for service account '%s/%s': %w",
+				sa.Namespace, sa.Name, err)
+		}
+	}
+
+	var authOpts []auth.Option
+	if cryptoSpec != nil {
+		authOpts = auth.OptionsFromSpec(cryptoSpec.Auth)
+	}
+	authOpts = append(authOpts,
+		auth.WithClient(r.Client),
+		auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.BucketKind, obj),
+		auth.WithSPIFFEBroker(r.SPIFFEBroker))
+	if sa != nil {
+		authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
+	}
+	if r.TokenCache != nil {
+		authOpts = append(authOpts,
+			auth.WithCache(*r.TokenCache),
+			auth.WithCacheOperation(cache.OperationReconcile))
+	}
 	if creds.proxyURL != nil {
 		authOpts = append(authOpts, auth.WithProxyURL(*creds.proxyURL))
 	}
-
 	if obj.Spec.Region != "" {
-		authOpts = append(authOpts, auth.WithSTSRegion(obj.Spec.Region))
+		authOpts = append(authOpts, auth.WithAWSRegion(obj.Spec.Region))
 	}
-
 	if sts := obj.Spec.STS; sts != nil {
-		authOpts = append(authOpts, auth.WithSTSEndpoint(sts.Endpoint))
+		authOpts = append(authOpts, auth.WithAWSSTSEndpoint(sts.Endpoint))
 	}
 
 	switch obj.Spec.Provider {

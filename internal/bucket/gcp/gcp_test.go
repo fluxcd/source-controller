@@ -35,7 +35,6 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	gcpstorage "cloud.google.com/go/storage"
 	. "github.com/onsi/gomega"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	raw "google.golang.org/api/storage/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,40 +60,32 @@ var (
 	close  func()
 	err    error
 	secret = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "gcp-secret",
-			Namespace: "default",
-		},
+		Name:      "gcp-secret",
+		Namespace: "default",
 		Data: map[string][]byte{
 			"serviceaccount": []byte(serviceAccountJSON),
 		},
 		Type: "Opaque",
 	}
 	badSecret = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "gcp-secret",
-			Namespace: "default",
-		},
+		Name:      "gcp-secret",
+		Namespace: "default",
 		Data: map[string][]byte{
 			"username": []byte("test-user"),
 		},
 		Type: "Opaque",
 	}
 	malformedSecret = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "gcp-secret",
-			Namespace: "default",
-		},
+		Name:      "gcp-secret",
+		Namespace: "default",
 		Data: map[string][]byte{
 			"serviceaccount": []byte("not-json"),
 		},
 		Type: "Opaque",
 	}
 	externalAccountSecret = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "gcp-secret",
-			Namespace: "default",
-		},
+		Name:      "gcp-secret",
+		Namespace: "default",
 		Data: map[string][]byte{
 			"serviceaccount": []byte(externalAccountJSON),
 		},
@@ -134,10 +125,8 @@ const externalAccountJSON = `{
 // createTestBucket creates a test bucket for testing purposes
 func createTestBucket() *sourcev1.Bucket {
 	return &sourcev1.Bucket{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "test-bucket",
-			Namespace: "default",
-		},
+		Name:      "test-bucket",
+		Namespace: "default",
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
 			Endpoint:   "storage.googleapis.com",
@@ -293,7 +282,7 @@ func TestNewClientWithProxyErr(t *testing.T) {
 		bucketAttrs, err := gcpClient.Client.Bucket("some-bucket").Attrs(context.Background())
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(bucketAttrs).To(BeNil())
-		g.Expect(err.Error()).To(ContainSubstring("failed to create provider access token"))
+		g.Expect(err.Error()).To(ContainSubstring("failed to create provider access credential"))
 	})
 }
 
@@ -325,7 +314,6 @@ func TestProxy(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			opts := []Option{WithProxyURL(tt.proxyURL)}
 			opts = append(opts, func(o *options) {
@@ -567,7 +555,7 @@ func getBucket() *raw.Bucket {
 				},
 				Condition: &raw.BucketLifecycleRuleCondition{
 					Age:                 &age,
-					IsLive:              googleapi.Bool(true),
+					IsLive:              new(true),
 					CreatedBefore:       "2021-01-02",
 					MatchesStorageClass: matchClasses,
 					NumNewerVersions:    3,

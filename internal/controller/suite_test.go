@@ -87,6 +87,8 @@ var (
 	testServer   *testserver.ArtifactServer
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
+
+	testOCIRepositoryReconciler *OCIRepositoryReconciler
 )
 
 var (
@@ -167,7 +169,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 
 	config.HTTP.Addr = fmt.Sprintf(":%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
-	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
+	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]any{}}
 
 	if opts.withBasicAuth {
 		// create htpasswd file (w BCrypt, which is required)
@@ -345,12 +347,13 @@ func TestMain(m *testing.M) {
 	testCache = cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
 
-	if err := (&OCIRepositoryReconciler{
+	testOCIRepositoryReconciler = &OCIRepositoryReconciler{
 		Client:   testEnv,
 		Recorder: events.NewFakeRecorder(32, false),
 		Metrics:  testMetricsH,
 		Storage:  testStorage,
-	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
+	}
+	if err := testOCIRepositoryReconciler.SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
@@ -510,8 +513,9 @@ func randStringRunes(n int) string {
 	return string(b)
 }
 
+//go:fix inline
 func int64p(i int64) *int64 {
-	return &i
+	return new(i)
 }
 
 func logOCIRepoStatus(t *testing.T, obj *sourcev1.OCIRepository) {

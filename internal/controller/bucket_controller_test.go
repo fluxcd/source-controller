@@ -40,7 +40,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
-	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -63,7 +62,7 @@ func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	namespaceName := "bucket-" + randStringRunes(5)
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+		Name: namespaceName,
 	}
 	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
 	t.Cleanup(func() {
@@ -114,10 +113,8 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "bucket-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "bucket-reconcile-",
+		Namespace:    "default",
 		Data: map[string][]byte{
 			"accesskey": []byte("key"),
 			"secretkey": []byte("secret"),
@@ -127,10 +124,8 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	defer testEnv.Delete(ctx, secret)
 
 	origObj := &sourcev1.Bucket{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "bucket-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "bucket-reconcile-",
+		Namespace:    "default",
 		Spec: sourcev1.BucketSpec{
 			Provider:   "generic",
 			BucketName: s3Server.BucketName,
@@ -235,7 +230,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
 				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
-				Size:     int64p(int64(len("d"))),
+				Size:     new(int64(len("d"))),
 			},
 			assertPaths: []string{
 				"/reconcile-storage/d.txt",
@@ -364,7 +359,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
-				Size:     int64p(int64(len("file"))),
+				Size:     new(int64(len("file"))),
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, "foo", "bar"),
@@ -390,10 +385,8 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			}
 
 			obj := &sourcev1.Bucket{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   1,
-				},
+				GenerateName: "test-",
+				Generation:   1,
 			}
 			if tt.beforeFunc != nil {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
@@ -494,9 +487,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Observes invalid secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
@@ -535,9 +526,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Observes invalid certSecretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
@@ -576,9 +565,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Observes invalid proxySecretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 				Data: map[string][]byte{},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -618,9 +605,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Observes invalid sts.secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
@@ -662,9 +647,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Observes invalid sts.certSecretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
@@ -927,10 +910,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			obj := &sourcev1.Bucket{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-bucket-",
-					Generation:   1,
-				},
+				GenerateName: "test-bucket-",
+				Generation:   1,
 				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
@@ -1004,17 +985,16 @@ const gcsExternalAccountConfig = `{
 
 func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 	tests := []struct {
-		name                               string
-		bucketName                         string
-		bucketObjects                      []*gcsmock.Object
-		secret                             *corev1.Secret
-		serviceAccount                     *corev1.ServiceAccount
-		beforeFunc                         func(obj *sourcev1.Bucket)
-		want                               sreconcile.Result
-		wantErr                            bool
-		assertIndex                        *index.Digester
-		assertConditions                   []metav1.Condition
-		disableObjectLevelWorkloadIdentity bool
+		name             string
+		bucketName       string
+		bucketObjects    []*gcsmock.Object
+		secret           *corev1.Secret
+		serviceAccount   *corev1.ServiceAccount
+		beforeFunc       func(obj *sourcev1.Bucket)
+		want             sreconcile.Result
+		wantErr          bool
+		assertIndex      *index.Digester
+		assertConditions []metav1.Condition
 	}{
 		{
 			name:       "Reconciles GCS source",
@@ -1028,9 +1008,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 				Data: map[string][]byte{
 					"accesskey":      []byte("key"),
 					"secretkey":      []byte("secret"),
@@ -1074,9 +1052,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			name:       "Observes invalid secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
@@ -1098,9 +1074,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			name:       "Observes unsupported credential type in secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 				Data: map[string][]byte{
 					"serviceaccount": []byte(gcsExternalAccountConfig),
 				},
@@ -1145,9 +1119,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			name:       "Observes invalid proxySecretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
-				},
+				Name: "dummy",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
@@ -1357,9 +1329,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			serviceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-sa",
-				},
+				Name: "test-sa",
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ServiceAccountName = "test-sa"
@@ -1396,29 +1366,6 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
-		{
-			name:       "GCS Object-Level fails when feature gate disabled",
-			bucketName: "dummy",
-			serviceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-sa",
-				},
-			},
-			beforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Spec.ServiceAccountName = "test-sa"
-				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
-				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
-			},
-			want:        sreconcile.ResultEmpty,
-			wantErr:     true,
-			assertIndex: index.NewDigester(),
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "to use spec.serviceAccountName for provider authentication please enable the ObjectLevelWorkloadIdentity feature gate in the controller"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
-				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-			},
-			disableObjectLevelWorkloadIdentity: true,
-		},
 		// TODO: Middleware for mock server to test authentication using secret.
 	}
 	for _, tt := range tests {
@@ -1444,20 +1391,12 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
-			// Handle ObjectLevelWorkloadIdentity feature gate
-			if !tt.disableObjectLevelWorkloadIdentity {
-				auth.EnableObjectLevelWorkloadIdentity()
-				t.Cleanup(auth.DisableObjectLevelWorkloadIdentity)
-			}
-
 			tmpDir := t.TempDir()
 
 			// Test bucket object.
 			obj := &sourcev1.Bucket{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-bucket-",
-					Generation:   1,
-				},
+				GenerateName: "test-bucket-",
+				Generation:   1,
 				Spec: sourcev1.BucketSpec{
 					BucketName: tt.bucketName,
 					Timeout:    &metav1.Duration{Duration: timeout},
@@ -1648,10 +1587,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			}
 
 			obj := &sourcev1.Bucket{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-bucket-",
-					Generation:   1,
-				},
+				GenerateName: "test-bucket-",
+				Generation:   1,
 				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
@@ -1742,14 +1679,10 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.Bucket{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: sourcev1.GroupVersion.String(),
-					Kind:       sourcev1.BucketKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-bucket",
-					Namespace: "foo",
-				},
+				APIVersion: sourcev1.GroupVersion.String(),
+				Kind:       sourcev1.BucketKind,
+				Name:       "test-bucket",
+				Namespace:  "foo",
 			}
 
 			c := fakeclient.NewClientBuilder().
@@ -2045,10 +1978,8 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.Bucket{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "bucket-reconcile-",
-					Namespace:    "default",
-				},
+				GenerateName: "bucket-reconcile-",
+				Namespace:    "default",
 				Spec: sourcev1.BucketSpec{
 					Provider:   tt.bucketProvider,
 					BucketName: "test",

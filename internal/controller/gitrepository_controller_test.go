@@ -39,7 +39,6 @@ import (
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -48,7 +47,6 @@ import (
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
-	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/gittestserver"
@@ -62,7 +60,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -210,7 +207,7 @@ func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	namespaceName := "gitrepo-" + randStringRunes(5)
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+		Name: namespaceName,
 	}
 	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
 	t.Cleanup(func() {
@@ -255,10 +252,8 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	origObj := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "gitrepository-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "gitrepository-reconcile-",
+		Namespace:    "default",
 		Spec: sourcev1.GitRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
 			URL:      server.HTTPAddress() + repoPath,
@@ -328,10 +323,8 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 	defer server.StopHTTP()
 
 	obj := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "empty-",
-			Generation:   1,
-		},
+		GenerateName: "empty-",
+		Generation:   1,
 		Spec: sourcev1.GitRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
 			Timeout:  &metav1.Duration{Duration: timeout},
@@ -407,9 +400,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				password: "1234",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "basic-auth",
-				},
+				Name: "basic-auth",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"password": []byte("1234"),
@@ -433,9 +424,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "mtls-certs",
-				},
+				Name: "mtls-certs",
 				Data: map[string][]byte{
 					"ca.crt":  tlsCA,
 					"tls.crt": clientPublicKey,
@@ -460,9 +449,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "invalid-mtls-certs",
-				},
+				Name: "invalid-mtls-certs",
 				Data: map[string][]byte{
 					"ca.crt":  tlsCA,
 					"tls.crt": clientPublicKey,
@@ -490,9 +477,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
+				Name: "ca-file",
 				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
@@ -515,9 +500,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
+				Name: "ca-file",
 				Data: map[string][]byte{
 					"ca.crt": tlsCA,
 					"caFile": []byte("invalid"),
@@ -541,9 +524,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "invalid-ca",
-				},
+				Name: "invalid-ca",
 				Data: map[string][]byte{
 					"caFile": []byte("invalid"),
 				},
@@ -574,7 +555,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-no-ca"},
+				Name: "gh-app-no-ca",
 				Data: map[string][]byte{
 					githubapp.KeyAppID:             []byte("123"),
 					githubapp.KeyAppInstallationID: []byte("456"),
@@ -609,7 +590,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				password:   "some-enterprise-token",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-ca"},
+				Name: "gh-app-ca",
 				Data: map[string][]byte{
 					githubapp.KeyAppID:             []byte("123"),
 					githubapp.KeyAppInstallationID: []byte("456"),
@@ -654,9 +635,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				username: "git",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "private-key",
-				},
+				Name: "private-key",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"identity": sshtestdata.PEMBytes["rsa"],
@@ -678,9 +657,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				username: "git",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "private-key",
-				},
+				Name: "private-key",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"identity": sshtestdata.PEMEncryptedKeys[2].PEMBytes,
@@ -722,9 +699,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				password: "1234",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "basic-auth",
-				},
+				Name: "basic-auth",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"password": []byte("1234"),
@@ -770,9 +745,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			name:     "empty provider with github app data in secret makes FetchFailed=True",
 			protocol: "http",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "github-app-secret",
-				},
+				Name: "github-app-secret",
 				Data: map[string][]byte{
 					githubapp.KeyAppID: []byte("1111"),
 				},
@@ -796,9 +769,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			name:     "github provider without github app data in secret makes FetchFailed=True",
 			protocol: "http",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "github-basic-auth",
-				},
+				Name: "github-basic-auth",
 				Data: map[string][]byte{
 					"username": []byte("abc"),
 					"password": []byte("1234"),
@@ -825,10 +796,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "auth-strategy-",
-					Generation:   1,
-				},
+				GenerateName: "auth-strategy-",
+				Generation:   1,
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
@@ -955,30 +924,12 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			wantErr: "ManagedIdentityCredential",
 		},
 		{
-			name: "azure provider with service account and feature gate for object-level identity disabled",
-			url:  "https://dev.azure.com/foo/bar/_git/baz",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Provider = sourcev1.GitProviderAzure
-				obj.Spec.ServiceAccountName = "azure-sa"
-			},
-			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
-		},
-		{
 			name: "aws provider with non codecommit URL",
 			url:  "https://github.com/org/repo.git",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderAWS
 			},
 			wantErr: "invalid AWS CodeCommit Git URL: github.com",
-		},
-		{
-			name: "aws provider with service account and feature gate for object-level identity disabled",
-			url:  "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Provider = sourcev1.GitProviderAWS
-				obj.Spec.ServiceAccountName = "aws-sa"
-			},
-			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
 		},
 		{
 			name: "github provider with no secret ref",
@@ -992,9 +943,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			name: "github provider with github app data in secret",
 			url:  "https://example.com/org/repo",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "githubAppSecret",
-				},
+				Name: "githubAppSecret",
 				Data: map[string][]byte{
 					githubapp.KeyAppID:             []byte("123"),
 					githubapp.KeyAppInstallationID: []byte("456"),
@@ -1013,9 +962,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			name: "generic provider with github app data in secret",
 			url:  "https://example.com/org/repo",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "githubAppSecret",
-				},
+				Name: "githubAppSecret",
 				Data: map[string][]byte{
 					githubapp.KeyAppID: []byte("123"),
 				},
@@ -1032,9 +979,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			name: "generic provider with github app client id in secret",
 			url:  "https://example.com/org/repo",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "githubAppSecret",
-				},
+				Name: "githubAppSecret",
 				Data: map[string][]byte{
 					githubapp.KeyAppClientID: []byte("Iv23liXXXXXXX"),
 				},
@@ -1051,9 +996,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			name: "github provider with basic auth secret",
 			url:  "https://github.com/org/repo.git",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "basic-auth-secret",
-				},
+				Name: "basic-auth-secret",
 				Data: map[string][]byte{
 					"username": []byte("abc"),
 					"password": []byte("1234"),
@@ -1105,7 +1048,6 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -1277,7 +1219,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				// Set new ignore value.
-				obj.Spec.Ignore = ptr.To("foo")
+				obj.Spec.Ignore = new("foo")
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
 					Artifact: &meta.Artifact{
@@ -1334,10 +1276,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "checkout-strategy-",
-					Generation:   1,
-				},
+				GenerateName: "checkout-strategy-",
+				Generation:   1,
 				Spec: sourcev1.GitRepositorySpec{
 					Interval:  metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
@@ -1451,7 +1391,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				obj.Spec.Ignore = ptr.To("!**.txt\n")
+				obj.Spec.Ignore = new("!**.txt\n")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
@@ -1530,16 +1470,13 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "reconcile-artifact-",
-					Generation:   1,
-				},
-				Status: sourcev1.GitRepositoryStatus{},
+				GenerateName: "reconcile-artifact-",
+				Generation:   1,
+				Status:       sourcev1.GitRepositoryStatus{},
 			}
 
 			if tt.beforeFunc != nil {
@@ -1651,9 +1588,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			var depObjs []client.Object
 			for _, d := range tt.dependencies {
 				obj := &sourcev1.GitRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: d.name,
-					},
+					Name: d.name,
 					Status: sourcev1.GitRepositoryStatus{
 						Conditions: d.conditions,
 					},
@@ -1682,14 +1617,11 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				Recorder:          events.NewFakeRecorder(32, false),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
-				features:          features.FeatureGates(),
 				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "reconcile-include",
-				},
+				Name: "reconcile-include",
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 				},
@@ -1787,7 +1719,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
 				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
-				Size:     int64p(int64(len("d"))),
+				Size:     new(int64(len("d"))),
 			},
 			assertPaths: []string{
 				"/reconcile-storage/d.txt",
@@ -1916,7 +1848,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
-				Size:     int64p(int64(len("file"))),
+				Size:     new(int64(len("file"))),
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, "foo", "bar"),
@@ -1938,15 +1870,12 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					Build(),
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   1,
-				},
+				GenerateName: "test-",
+				Generation:   1,
 			}
 			if tt.beforeFunc != nil {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
@@ -1992,17 +1921,14 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	r := &GitRepositoryReconciler{
 		Recorder:     events.NewFakeRecorder(32, false),
 		Storage:      testStorage,
-		features:     features.FeatureGates(),
 		patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	obj := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "reconcile-delete-",
-			DeletionTimestamp: &metav1.Time{Time: time.Now()},
-			Finalizers: []string{
-				sourcev1.SourceFinalizer,
-			},
+		Name:              "reconcile-delete-",
+		DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		Finalizers: []string{
+			sourcev1.SourceFinalizer,
 		},
 		Status: sourcev1.GitRepositoryStatus{},
 	}
@@ -2032,9 +1958,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid commit with mode=HEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2054,7 +1978,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2062,9 +1986,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid commit with mode=head makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2084,7 +2006,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2092,9 +2014,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid tag with mode=tag makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2120,7 +2040,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTag),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2128,9 +2048,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid tag and commit with mode=TagAndHEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2159,7 +2077,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key '5982D0279C227FFD'\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2167,7 +2085,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Source verification mode in status is unset if there's no verification in spec",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.SourceVerificationMode = ptrToVerificationMode(sourcev1.ModeGitHEAD)
+				obj.Status.SourceVerificationMode = new(sourcev1.ModeGitHEAD)
 				obj.Status.SourceVerificationFingerprint = "stale-fingerprint"
 				obj.Spec.Verification = nil
 			},
@@ -2176,9 +2094,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Verification of tag with no tag ref SourceVerifiedCondition=False and returns a stalling error",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2207,9 +2123,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Unsigned tag with mode=tag makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2241,9 +2155,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Partially successful verification makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2279,9 +2191,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "No PGP keys in secret makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 			},
 			commit: git.Commit{
 				Hash:      []byte("shasum"),
@@ -2305,9 +2215,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Invalid tag signature with mode=tag makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2340,9 +2248,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Invalid PGP key makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "invalid",
-				},
+				Name: "invalid",
 				Data: map[string][]byte{
 					"foo": []byte("invalid PGP public key"),
 				},
@@ -2404,9 +2310,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid SSH-signed commit with mode=HEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ssh-keys",
-				},
+				Name: "ssh-keys",
 				Data: map[string][]byte{
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
 				},
@@ -2426,7 +2330,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
 			},
@@ -2434,9 +2338,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid SSH-signed tag with mode=Tag makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ssh-keys",
-				},
+				Name: "ssh-keys",
 				Data: map[string][]byte{
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
 				},
@@ -2462,7 +2364,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTag),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
 			},
@@ -2470,9 +2372,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid SSH-signed tag and commit with mode=TagAndHEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ssh-keys",
-				},
+				Name: "ssh-keys",
 				Data: map[string][]byte{
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
 				},
@@ -2501,7 +2401,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
 			},
@@ -2509,9 +2409,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "SSH-signed commit but Secret only has .asc keys makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "pgp-keys-only",
-				},
+				Name: "pgp-keys-only",
 				Data: map[string][]byte{
 					"author1.asc": []byte(armoredKeyRingFixture),
 				},
@@ -2538,9 +2436,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "PGP-signed commit but Secret only has .sshpub keys makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ssh-keys-only",
-				},
+				Name: "ssh-keys-only",
 				Data: map[string][]byte{
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
 				},
@@ -2567,9 +2463,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "SSH-signed tag but Secret only has .asc keys makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "pgp-keys-only",
-				},
+				Name: "pgp-keys-only",
 				Data: map[string][]byte{
 					"author1.asc": []byte(armoredKeyRingFixture),
 				},
@@ -2602,9 +2496,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Invalid SSH key in .sshpub entry makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "invalid-ssh-key",
-				},
+				Name: "invalid-ssh-key",
 				Data: map[string][]byte{
 					"author1.sshpub": []byte("ssh-ed25519 INVALIDKEY test@example.com"),
 				},
@@ -2631,9 +2523,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Mixed: PGP-signed tag and SSH-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "mixed-keys",
-				},
+				Name: "mixed-keys",
 				Data: map[string][]byte{
 					"author1.asc":    []byte(armoredKeyRingFixture),
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
@@ -2663,7 +2553,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key '5982D0279C227FFD'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
 			},
@@ -2671,9 +2561,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Mixed: SSH-signed tag and PGP-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "mixed-keys-reverse",
-				},
+				Name: "mixed-keys-reverse",
 				Data: map[string][]byte{
 					"author1.asc":    []byte(armoredKeyRingFixture),
 					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
@@ -2703,7 +2591,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2711,9 +2599,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Unsupported signature type makes SourceVerifiedCondition=False",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "existing",
-				},
+				Name: "existing",
 				Data: map[string][]byte{
 					"foo": []byte(armoredKeyRingFixture),
 				},
@@ -2740,9 +2626,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 		{
 			name: "Valid commit with explicit .asc key suffix makes SourceVerifiedCondition=True",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "explicit-asc",
-				},
+				Name: "explicit-asc",
 				Data: map[string][]byte{
 					"foo.asc": []byte(armoredKeyRingFixture),
 				},
@@ -2762,7 +2646,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				}
 			},
 			want:                       sreconcile.ResultSuccess,
-			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			wantSourceVerificationMode: new(sourcev1.ModeGitHEAD),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
 			},
@@ -2784,16 +2668,13 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				Recorder:     events.NewFakeRecorder(32, false),
 				Client:       clientBuilder.Build(),
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "verify-commit-",
-					Generation:   1,
-				},
-				Status: sourcev1.GitRepositoryStatus{},
+				GenerateName: "verify-commit-",
+				Generation:   1,
+				Status:       sourcev1.GitRepositoryStatus{},
 			}
 
 			if tt.beforeFunc != nil {
@@ -2916,11 +2797,9 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "condition-update",
-					Namespace:  "default",
-					Finalizers: []string{sourcev1.SourceFinalizer},
-				},
+				Name:       "condition-update",
+				Namespace:  "default",
+				Finalizers: []string{sourcev1.SourceFinalizer},
 				Spec: sourcev1.GitRepositorySpec{
 					URL:      server.HTTPAddress() + repoPath,
 					Interval: metav1.Duration{Duration: interval},
@@ -2941,7 +2820,6 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				Client:       clientBuilder.Build(),
 				Recorder:     events.NewFakeRecorder(32, false),
 				Storage:      testStorage,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -3165,14 +3043,10 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: sourcev1.GroupVersion.String(),
-					Kind:       sourcev1.GitRepositoryKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gitrepo",
-					Namespace: "foo",
-				},
+				APIVersion: sourcev1.GroupVersion.String(),
+				Kind:       sourcev1.GitRepositoryKind,
+				Name:       "gitrepo",
+				Namespace:  "foo",
 			}
 
 			clientBuilder := fakeclient.NewClientBuilder().
@@ -3347,7 +3221,6 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &GitRepositoryReconciler{
 				Recorder:     recorder,
-				features:     features.FeatureGates(),
 				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)
@@ -3466,9 +3339,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			var depObjs []client.Object
 			for _, d := range tt.dependencies {
 				obj := &sourcev1.GitRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: d.name,
-					},
+					Name: d.name,
 					Status: sourcev1.GitRepositoryStatus{
 						Conditions: d.conditions,
 					},
@@ -3498,9 +3369,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			}
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "reconcile-include",
-				},
+				Name: "reconcile-include",
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 				},
@@ -3708,15 +3577,15 @@ func TestGitContentConfigChanged(t *testing.T) {
 		{
 			name: "unobserved ignore",
 			obj: sourcev1.GitRepository{
-				Spec: sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
+				Spec: sourcev1.GitRepositorySpec{Ignore: new("foo")},
 			},
 			want: true,
 		},
 		{
 			name: "observed ignore",
 			obj: sourcev1.GitRepository{
-				Spec:   sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
-				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: ptr.To("foo")},
+				Spec:   sourcev1.GitRepositorySpec{Ignore: new("foo")},
+				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: new("foo")},
 			},
 			want: false,
 		},
@@ -4045,7 +3914,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+					SourceVerificationMode: new(sourcev1.ModeGitTag),
 				},
 			},
 			want: true,
@@ -4059,7 +3928,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+					SourceVerificationMode: new(sourcev1.ModeGitTag),
 				},
 			},
 			want: true,
@@ -4073,7 +3942,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+					SourceVerificationMode: new(sourcev1.ModeGitHEAD),
 				},
 			},
 			want: true,
@@ -4087,7 +3956,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+					SourceVerificationMode: new(sourcev1.ModeGitHEAD),
 				},
 			},
 			want: true,
@@ -4101,7 +3970,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+					SourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 				},
 			},
 			want: false,
@@ -4115,7 +3984,7 @@ func Test_requiresVerification(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					SourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+					SourceVerificationMode: new(sourcev1.ModeGitTagAndHEAD),
 				},
 			},
 			want: false,
@@ -4161,17 +4030,17 @@ func Test_verificationFingerprint(t *testing.T) {
 
 func TestGitRepositoryReconciler_verificationPolicyChanged(t *testing.T) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
-		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
+		Name: "keys", Namespace: "default",
+		Data: map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
 	}
 	rotatedSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
-		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture + "\n")},
+		Name: "keys", Namespace: "default",
+		Data: map[string][]byte{"foo": []byte(armoredKeyRingFixture + "\n")},
 	}
 
 	newObj := func(mode sourcev1.GitVerificationMode, fingerprint string) *sourcev1.GitRepository {
 		obj := &sourcev1.GitRepository{
-			ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "default"},
+			Name: "repo", Namespace: "default",
 			Spec: sourcev1.GitRepositorySpec{
 				Verification: &sourcev1.GitRepositoryVerification{
 					Mode:      mode,
@@ -4262,8 +4131,8 @@ func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *tes
 	g.Expect(remoteBranchForHead(localRepo, headRef, "staging")).To(Succeed())
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
-		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
+		Name: "keys", Namespace: "default",
+		Data: map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
 	}
 
 	tests := []struct {
@@ -4287,11 +4156,9 @@ func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *tes
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "verification-policy-",
-					Namespace:    "default",
-					Generation:   1,
-				},
+				GenerateName: "verification-policy-",
+				Namespace:    "default",
+				Generation:   1,
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
@@ -4309,7 +4176,7 @@ func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *tes
 						Revision: "staging@sha1:" + headRef.Hash().String(),
 						Path:     randStringRunes(10),
 					},
-					SourceVerificationMode:        ptrToVerificationMode(sourcev1.ModeGitHEAD),
+					SourceVerificationMode:        new(sourcev1.ModeGitHEAD),
 					SourceVerificationFingerprint: tt.fingerprint,
 				},
 			}
@@ -4344,6 +4211,7 @@ func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *tes
 	}
 }
 
+//go:fix inline
 func ptrToVerificationMode(mode sourcev1.GitVerificationMode) *sourcev1.GitVerificationMode {
-	return &mode
+	return new(mode)
 }

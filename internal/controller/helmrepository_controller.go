@@ -390,7 +390,7 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 // v1.FetchFailedCondition is removed, and the repository.ChartRepository
 // pointer is set to the newly fetched index.
 func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
-	obj *sourcev1.HelmRepository, artifact *meta.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
+	obj *sourcev1.HelmRepository, artifact *meta.Artifact, chartRepo *repository.ChartRepository) (_ sreconcile.Result, retErr error) {
 	// Ensure it's not an OCI URL. API validation ensures that only
 	// http/https/oci scheme are allowed.
 	if helmreg.IsOCI(obj.Spec.URL) {
@@ -461,6 +461,16 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 	*chartRepo = *newChartRepo
 
+	// reconcileArtifact removes the cached index on success. On error the
+	// deferred cleanup below removes it, covering error paths added later.
+	defer func() {
+		if retErr != nil {
+			if err := chartRepo.Clear(); err != nil {
+				ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary cached index file")
+			}
+		}
+	}()
+
 	// Early comparison to current Artifact.
 	if curArtifact := obj.GetArtifact(); curArtifact != nil {
 		curRev := digest.Digest(curArtifact.Revision)
@@ -478,7 +488,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromPath(); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
+			fmt.Errorf("failed to load Helm repository from index YAML at %s: %w", redactURL(obj.Spec.URL), err),
 			sourcev1.IndexationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -491,7 +501,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	revision := chartRepo.Digest(intdigest.Canonical)
 	if revision.Validate() != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to calculate revision: %w", err),
+			fmt.Errorf("failed to calculate revision: invalid digest '%s'", revision),
 			sourcev1.IndexationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -721,4 +731,14 @@ func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *pa
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// redactURL returns the given URL with the password of its user info
+// replaced, so it can be added to conditions and events.
+func redactURL(repoURL string) string {
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "<invalid URL>"
+	}
+	return u.Redacted()
 }

@@ -275,14 +275,14 @@ data:
   secretkey: <BASE64>
 ```
 
-##### AWS Controller-Level Workload Identity example
+##### AWS Workload Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: aws-controller-level-workload-identity
+  name: aws-workload-identity
   namespace: default
 spec:
   interval: 5m0s
@@ -293,18 +293,14 @@ spec:
   timeout: 30s
 ```
 
-##### AWS Object-Level Workload Identity example
-
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
+##### AWS Object Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: aws-object-level-workload-identity
+  name: aws-object-identity
   namespace: default
 spec:
   interval: 5m0s
@@ -312,13 +308,13 @@ spec:
   bucketName: podinfo
   endpoint: s3.amazonaws.com
   region: us-east-1
-  serviceAccountName: aws-workload-identity-sa
+  serviceAccountName: aws-object-identity-sa
   timeout: 30s
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: aws-workload-identity-sa
+  name: aws-object-identity-sa
   namespace: default
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/flux-bucket-role
@@ -339,8 +335,7 @@ with:
   with the `AZURE_CLIENT_ID`
 - Managed Identity with a system-assigned identity
 
-is attempted by default. If no chain can be established, the bucket
-is assumed to be publicly reachable.
+is attempted by default.
 
 When a reference is specified, it expects a Secret with one of the following
 sets of `.data` fields:
@@ -358,23 +353,6 @@ sets of `.data` fields:
 For any Managed Identity and/or Microsoft Entra ID (Formerly Azure Active Directory) authentication method,
 the base URL can be configured using `.data.authorityHost`. If not supplied,
 [`AzurePublicCloud` is assumed](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#AuthorityHost).
-
-##### Azure example
-
-```yaml
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: Bucket
-metadata:
-  name: azure-public
-  namespace: default
-spec:
-  interval: 5m0s
-  provider: azure
-  bucketName: podinfo
-  endpoint: https://podinfoaccount.blob.core.windows.net
-  timeout: 30s
-```
 
 ##### Azure Service Principal Secret example
 
@@ -571,31 +549,27 @@ spec:
   endpoint: https://testfluxwi.blob.core.windows.net
 ```
 
-##### Azure Object-Level Workload Identity example
-
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
+##### Azure Object Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: azure-object-level-workload-identity
+  name: azure-object-identity
   namespace: default
 spec:
   interval: 5m0s
   provider: azure
   bucketName: testwi
   endpoint: https://testfluxwi.blob.core.windows.net
-  serviceAccountName: azure-workload-identity-sa
+  serviceAccountName: azure-object-identity-sa
   timeout: 30s
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: azure-workload-identity-sa
+  name: azure-object-identity-sa
   namespace: default
   annotations:
     azure.workload.identity/client-id: <AZURE_CLIENT_ID>
@@ -656,14 +630,14 @@ Refer to the [Azure documentation](https://learn.microsoft.com/en-us/rest/api/st
 
 For detailed setup instructions, see: https://fluxcd.io/flux/integrations/gcp/#for-google-cloud-storage
 
-##### GCP Controller-Level Workload Identity example
+##### GCP Workload Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: gcp-controller-level-workload-identity
+  name: gcp-workload-identity
   namespace: default
 spec:
   interval: 5m0s
@@ -674,18 +648,14 @@ spec:
   timeout: 30s
 ```
 
-##### GCP Object-Level Workload Identity example
-
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
+##### GCP Object Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: gcp-object-level-workload-identity
+  name: gcp-object-identity
   namespace: default
 spec:
   interval: 5m0s
@@ -693,13 +663,13 @@ spec:
   bucketName: podinfo
   endpoint: storage.googleapis.com
   region: us-east-1
-  serviceAccountName: gcp-workload-identity-sa
+  serviceAccountName: gcp-object-identity-sa
   timeout: 30s
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gcp-workload-identity-sa
+  name: gcp-object-identity-sa
   namespace: default
   annotations:
     iam.gke.io/gcp-service-account: <identity-name>
@@ -753,9 +723,9 @@ Where the (base64 decoded) value of `.data.serviceaccount` looks like this:
 Only service account keys are accepted, i.e. the `type` field must be set to
 `service_account`. Other Google credential configurations, such as
 `external_account` (workload identity federation), are rejected. To authenticate
-without a static key, use Workload Identity as shown in the
-[GCP Controller-Level](#gcp-controller-level-workload-identity-example) and
-[GCP Object-Level](#gcp-object-level-workload-identity-example) examples.
+without a static key, use workload identity or object identity as shown in the
+[GCP Workload Identity](#gcp-workload-identity-example) and
+[GCP Object Identity](#gcp-object-identity-example) examples.
 
 ### Interval
 
@@ -1000,12 +970,15 @@ the `.spec.provider` field:
 - When `.spec.provider` is set to `generic`, the controller will fetch the image
   pull secrets attached to the Service Account and use them for authentication.
 - When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
-  will be used for Workload Identity authentication. In this case, the controller
-  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
-  controller will error out.
+  will be used to acquire an object identity.
 
-**Note:** that for a publicly accessible object storage, you don't need to
-provide a `secretRef` nor `serviceAccountName`.
+For a complete guide to the ServiceAccount annotations used for object
+identity, including the `spiffe` credential provider, see the
+[Object Identity](/flux/integrations/object-identity/) docs.
+
+**Note:** when `.spec.provider` is set to `generic` and the object storage
+allows anonymous access, you don't need to provide a `secretRef` nor a
+`serviceAccountName`. The cloud providers all require authentication.
 
 **Important:** `.spec.secretRef` and `.spec.serviceAccountName` are mutually
 exclusive and cannot be set at the same time. This constraint is enforced

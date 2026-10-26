@@ -38,14 +38,15 @@ var features = map[string]bool{
 	CacheSecretsAndConfigMaps: false,
 }
 
-func init() {
-	auth.SetFeatureGates(features)
+var retiredFeatures = map[string]string{
+	// Retired in Flux 2.10.
+	auth.FeatureGateObjectLevelWorkloadIdentity: auth.FeatureGateObjectLevelWorkloadIdentityRetirementReason,
 }
 
 // FeatureGates contains a list of all supported feature gates and
 // their default values.
-func FeatureGates() map[string]bool {
-	return features
+func FeatureGates() (map[string]bool, map[string]string) {
+	return features, retiredFeatures
 }
 
 // Enabled verifies whether the feature is enabled or not.

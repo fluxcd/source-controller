@@ -6,6 +6,8 @@
 |---------------------------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--artifact-retention-records`        | int           | The maximum number of artifacts to be kept in storage after a garbage collection. (default 2)                                                                                            |
 | `--artifact-retention-ttl`            | duration      | The duration of time that artifacts from previous reconciliations will be kept in storage before being garbage collected. (default 1m0s)                                                 |
+| `--authorized-artifact-client-spiffe-id` | strings    | SPIFFE ID authorized to fetch artifacts from the artifact server. Can be repeated. When set, the artifact server uses SPIFFE mTLS.                                                        |
+| `--authorized-event-server-spiffe-id` | strings      | SPIFFE ID of an event server authorized to receive events from source-controller. Can be repeated. When set, the event recorder uses SPIFFE mTLS.                                         |
 | `--concurrent`                        | int           | The number of concurrent reconciles per controller. (default 2)                                                                                                                          |
 | `--default-service-account`           | string        | Default service account to use for workload identity when not specified in resources.                                                                                                    |
 | `--enable-leader-election`            | boolean       | Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.                                                                    |
@@ -34,15 +36,61 @@
 | `--storage-adv-addr`                  | string        | The advertised address of the static file server.                                                                                                                                        |
 | `--storage-path`                      | string        | The local storage path.                                                                                                                                                                  |
 | `--token-cache-max-size`              | int           | The maximum amount of entries in the LRU cache used for tokens. (default 100, enabled)                                                                                                   |
+| `--spiffe-broker-endpoint`            | string        | The gRPC URL of the SPIFFE Broker endpoint.                                                                                                                                              |
+| `--spiffe-broker-id`                  | strings       | SPIFFE ID of the SPIFFE Broker endpoint. Can be repeated.                                                                                                                                |
 | `--token-cache-max-duration`          | duration      | The maximum duration for which a token would be considered unexpired. This is capped at 1h. (default 1h)                                                                                 |
 | `--watch-all-namespaces`              | boolean       | Watch for custom resources in all namespaces, if set to false it will only watch the runtime namespace. (default true)                                                                   |
 | `--watch-label-selector`              | string        | Watch for resources with matching labels e.g. 'sharding.fluxcd.io/key=shard1'.                                                                                                           |
 | `--feature-gates`                     | mapStringBool | A comma separated list of key=value pairs defining the state of experimental features.                                                                                                   |
+
+### SPIFFE mTLS
+
+When at least one of the repeatable flags `--authorized-artifact-client-spiffe-id`
+or `--authorized-event-server-spiffe-id` is set, source-controller acquires an
+X.509-SVID from the SPIFFE Workload API. The `SPIFFE_ENDPOINT_SOCKET` environment
+variable must point to the Workload API socket.
+
+- `--authorized-artifact-client-spiffe-id` authorizes the given SPIFFE IDs to
+  fetch artifacts from the artifact server. When set, the artifact server uses
+  mTLS.
+- `--authorized-event-server-spiffe-id` authorizes the given SPIFFE IDs of
+  event servers to which source-controller sends events. When set, the event
+  recorder uses mTLS.
+
+Each traffic type is protected independently. SPIFFE mTLS is transparent to the
+Flux API: the scheme of `.status.artifact.url` does not change.
+
+Each flag value is interpreted as follows:
+
+- `spiffe://<trust domain>/<path>` authorizes exactly that SPIFFE ID.
+- `spiffe://<trust domain>/<path>/` (with a trailing slash) authorizes any
+  SPIFFE ID with that path prefix.
+- `spiffe://<trust domain>` (without a path) authorizes any SPIFFE ID in that
+  trust domain.
+
+Whenever `<trust domain>` equals the special value `self`, source-controller
+understands it as the trust domain of the controller's own X509-SVID.
+
+Invalid values cause source-controller to fail at startup.
+
+### SPIFFE Broker API
+
+When `--spiffe-broker-endpoint` and at least one `--spiffe-broker-id` are set,
+source-controller acquires an X.509-SVID from the SPIFFE Workload API and uses it to
+authenticate to the SPIFFE Broker API. The `SPIFFE_ENDPOINT_SOCKET` environment
+variable must point to the Workload API socket.
+
+The Broker is used to acquire JWT-SVIDs for object identity when a
+ServiceAccount sets `credential.auth.fluxcd.io/provider` to `spiffe`. The
+Broker endpoint is a TCP gRPC target, e.g.
+`dns:///spire-server.spire.svc.cluster.local:8443`.
+
+Each `--spiffe-broker-id` value is interpreted like the SPIFFE IDs used by the
+mTLS flags. Invalid values cause source-controller to fail at startup.
 
 ### Feature Gates
 
 | Name                          | Default Value | Description                                                                                                                                                                                                               |
 |-------------------------------|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `CacheSecretsAndConfigMaps`   | `false`       | Configures the caching of Secrets and ConfigMaps by the controller-runtime client. When enabled, it will cache both object types, resulting in increased memory usage and cluster-wide RBAC permissions (list and watch). |
-| `ObjectLevelWorkloadIdentity` | `false`       | Enables the use of object-level workload identity for the controller.                                                                                                                                                     |
 | `OptimizedGitClones`          | `true`        | Optimises Git resource usage by only cloning repositories when the HEAD commit changed since last reconciliation.                                                                                                         |

@@ -34,10 +34,10 @@ const (
 	BucketProviderGeneric string = "generic"
 	// BucketProviderAmazon for an AWS S3 object storage Bucket.
 	// Provides support for retrieving credentials from the AWS EC2 service
-	// and workload identity authentication.
+	// and for object identity.
 	BucketProviderAmazon string = "aws"
 	// BucketProviderGoogle for a Google Cloud Storage Bucket.
-	// Provides support for authentication using a workload identity.
+	// Provides support for authentication using object identity.
 	BucketProviderGoogle string = "gcp"
 	// BucketProviderAzure for an Azure Blob Storage Bucket.
 	// Provides support for authentication using a Service Principal,
@@ -98,8 +98,8 @@ type BucketSpec struct {
 
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 	// the bucket. This field is only supported for the 'gcp' and 'aws' providers.
-	// For more information about workload identity:
-	// https://fluxcd.io/flux/components/source/buckets/#workload-identity
+	// For more information about object identity:
+	// https://fluxcd.io/flux/integrations/object-identity/
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
