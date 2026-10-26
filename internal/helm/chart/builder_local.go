@@ -146,7 +146,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// Merge chart values, if instructed
 	var (
-		mergedValues map[string]interface{}
+		mergedValues map[string]any
 		valuesFiles  []string
 	)
 	if len(opts.GetValuesFiles()) > 0 {
@@ -199,8 +199,8 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 // file is considered an error. If ignoreMissing is true, missing files are ignored.
 // It returns the merge result and the list of files that contributed to that result,
 // or an error.
-func mergeFileValues(baseDir string, paths []string, ignoreMissing bool) (map[string]interface{}, []string, error) {
-	mergedValues := make(map[string]interface{})
+func mergeFileValues(baseDir string, paths []string, ignoreMissing bool) (map[string]any, []string, error) {
+	mergedValues := make(map[string]any)
 	valuesFiles := make([]string, 0, len(paths))
 	for _, p := range paths {
 		secureP, err := securejoin.SecureJoin(baseDir, p)
@@ -222,7 +222,7 @@ func mergeFileValues(baseDir string, paths []string, ignoreMissing bool) (map[st
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not read values from file '%s': %w", p, err)
 		}
-		values := make(map[string]interface{})
+		values := make(map[string]any)
 		err = yaml.Unmarshal(b, &values)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)

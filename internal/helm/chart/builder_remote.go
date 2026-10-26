@@ -235,8 +235,8 @@ func setBuildMetaData(version, versionMetadata string) (*semver.Version, error) 
 // missing files are ignored.
 // It returns the merge result and the list of files that contributed to that result,
 // or an error.
-func mergeChartValues(chart *helmchart.Chart, paths []string, ignoreMissing bool) (map[string]interface{}, []string, error) {
-	mergedValues := make(map[string]interface{})
+func mergeChartValues(chart *helmchart.Chart, paths []string, ignoreMissing bool) (map[string]any, []string, error) {
+	mergedValues := make(map[string]any)
 	valuesFiles := make([]string, 0, len(paths))
 	for _, p := range paths {
 		cfn := filepath.Clean(p)
@@ -258,7 +258,7 @@ func mergeChartValues(chart *helmchart.Chart, paths []string, ignoreMissing bool
 			}
 			return nil, nil, fmt.Errorf("no values file found at path '%s'", p)
 		}
-		values := make(map[string]interface{})
+		values := make(map[string]any)
 		if err := yaml.Unmarshal(b, &values); err != nil {
 			return nil, nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)
 		}

@@ -30,7 +30,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -259,7 +258,7 @@ func ValidateSecret(secret *corev1.Secret) error {
 // exists, or returns a (client) error.
 func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	items := c.Client.NewListBlobsFlatPager(bucketName, &azblob.ListBlobsFlatOptions{
-		MaxResults: to.Ptr(int32(1)),
+		MaxResults: new(int32(1)),
 	})
 	// We call next page only once since we just want to see if we get an error
 	if _, err := items.NextPage(ctx); err != nil {

@@ -447,12 +447,10 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 	provider, err := r.createBucketProvider(ctx, obj, creds)
 	if err != nil {
-		var stallingErr *serror.Stalling
-		var genericErr *serror.Generic
-		if errors.As(err, &stallingErr) {
+		if stallingErr, ok := errors.AsType[*serror.Stalling](err); ok {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stallingErr.Reason, "%s", stallingErr)
 			return sreconcile.ResultEmpty, stallingErr
-		} else if errors.As(err, &genericErr) {
+		} else if genericErr, ok := errors.AsType[*serror.Generic](err); ok {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, genericErr.Reason, "%s", genericErr)
 			return sreconcile.ResultEmpty, genericErr
 		} else {
