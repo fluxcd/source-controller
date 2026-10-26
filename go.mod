@@ -26,7 +26,7 @@ require (
 	github.com/fluxcd/pkg/apis/crypto v0.5.0
 	github.com/fluxcd/pkg/apis/event v0.32.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
-	github.com/fluxcd/pkg/artifact v0.27.0
+	github.com/fluxcd/pkg/artifact v0.28.0
 	github.com/fluxcd/pkg/auth v0.66.0
 	github.com/fluxcd/pkg/cache v0.19.0
 	github.com/fluxcd/pkg/git v0.56.0

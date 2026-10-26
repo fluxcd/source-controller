@@ -369,8 +369,8 @@ github.com/fluxcd/pkg/apis/event v0.32.0 h1:3zyjdUspwQN+EQJPlUXwCvCMbeqtB+azlNme
 github.com/fluxcd/pkg/apis/event v0.32.0/go.mod h1:ALma8dTqo+NbI+z4BawSzt0pAPjetCSNNUSSS/9p0VU=
 github.com/fluxcd/pkg/apis/meta v1.38.0 h1:7t6/DuGFAPx2LE4MsRh1jskjnVE6qELKfr/LrfG7KE8=
 github.com/fluxcd/pkg/apis/meta v1.38.0/go.mod h1:lmdugeiZyt6w+DRm8ypkB+nwrzm+saMbqSfZKGBbTOE=
-github.com/fluxcd/pkg/artifact v0.27.0 h1:dbZ6JfSUlyQn7SyseDQgK5RvD4xaxsVKff7pb00UIaM=
-github.com/fluxcd/pkg/artifact v0.27.0/go.mod h1:h4bURFRXHpl6ASHRgjqyPQJg4mh+8iQVMgM4Nyk1geM=
+github.com/fluxcd/pkg/artifact v0.28.0 h1:k6/KjWQtHvLJ+KR2kciXJoL87vE6EuBZuZVzpaN4Uak=
+github.com/fluxcd/pkg/artifact v0.28.0/go.mod h1:h4bURFRXHpl6ASHRgjqyPQJg4mh+8iQVMgM4Nyk1geM=
 github.com/fluxcd/pkg/auth v0.66.0 h1:fNS6cf1WOVxVCdEKfCfDgbEgk2t3kzepaI1IKuiXuYo=
 github.com/fluxcd/pkg/auth v0.66.0/go.mod h1:eD0iXDzt4BCHVNoBoDkYCsD3+LD39WN/r1qaqsgPJWk=
 github.com/fluxcd/pkg/cache v0.19.0 h1:gcpASwfXLkaHTq8dv9AkXD+IvD54IfskRwGv3SDwC+E=
