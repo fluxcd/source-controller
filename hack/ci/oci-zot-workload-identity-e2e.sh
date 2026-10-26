@@ -77,7 +77,7 @@ cleanup() {
 trap cleanup EXIT
 
 require() { command -v "$1" >/dev/null 2>&1 || fail "required tool '$1' not found in PATH"; }
-for bin in docker kind kubectl kustomize flux; do require "$bin"; done
+for bin in docker kind kubectl kustomize flux helm; do require "$bin"; done
 
 start_zot() {
     local config="$1"
@@ -645,6 +645,24 @@ EOF
 kubectl -n "${SPIRE_NAMESPACE}" rollout status daemonset/spire-agent --timeout=5m
 
 ##############################################################################
+log "Installing the SPIFFE CSI driver"
+##############################################################################
+helm repo add spiffe https://spiffe.github.io/helm-charts-hardened >/dev/null 2>&1 || true
+helm repo update spiffe >/dev/null
+helm upgrade --install spire-csi spiffe/spire \
+    --version "${SPIRE_CHART_VERSION:-0.30.3}" \
+    --namespace "${SPIRE_NAMESPACE}" \
+    --set global.spire.trustDomain="${SPIRE_TRUST_DOMAIN}" \
+    --set global.spire.namespaces.create=false \
+    --set spire-server.enabled=false \
+    --set spire-agent.enabled=false \
+    --set spiffe-csi-driver.enabled=true \
+    --set spiffe-csi-driver.agentSocketPath=/run/spire/agent-sockets/api.sock \
+    --set spiffe-oidc-discovery-provider.enabled=false \
+    --wait --timeout 5m
+kubectl -n "${SPIRE_NAMESPACE}" rollout status daemonset/spire-csi-spiffe-csi-driver --timeout=5m
+
+##############################################################################
 log "Starting Zot with OIDC bearer authentication"
 ##############################################################################
 cat > "${WORKDIR}/zot-auth.json" <<EOF
@@ -744,8 +762,9 @@ spec:
               readOnly: true
       volumes:
         - name: spiffe-workload-api
-          hostPath:
-            path: /run/spire/agent-sockets
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true
 EOF
 )" >/dev/null
 kubectl -n "${NS}" rollout status deploy/source-controller --timeout=2m
