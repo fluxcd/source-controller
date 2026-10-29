@@ -199,7 +199,13 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Fetch the Bucket
 	obj := &sourcev1.Bucket{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if client.IgnoreNotFound(err) == nil {
+			if cleanupErr := removeArtifactsForMissingObject(r.Storage, "Bucket", req.Namespace, req.Name); cleanupErr != nil {
+				return ctrl.Result{}, cleanupErr
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	// Initialize the patch helper with the current version of the object.
