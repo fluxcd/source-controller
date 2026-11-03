@@ -103,17 +103,17 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		contents := ""
+		var contents strings.Builder
 		for _, o := range s.Objects {
 			etag := md5.Sum(o.Content)
-			contents += fmt.Sprintf(`
+			contents.WriteString(fmt.Sprintf(`
 		<Contents>
 			<Key>%s</Key>
 			<LastModified>%s</LastModified>
 			<Size>%d</Size>
 			<ETag>&quot;%x&quot;</ETag>
 			<StorageClass>STANDARD</StorageClass>
-		</Contents>`, o.Key, o.LastModified.UTC().Format(time.RFC3339), len(o.Content), etag)
+		</Contents>`, o.Key, o.LastModified.UTC().Format(time.RFC3339), len(o.Content), etag))
 		}
 
 		fmt.Fprintf(w, `
@@ -127,7 +127,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	<IsTruncated>false</IsTruncated>
 	%s
 </ListBucketResult>
-		`, s.BucketName, len(s.Objects), contents)
+		`, s.BucketName, len(s.Objects), contents.String())
 	default:
 		if !strings.HasPrefix(r.URL.Path, "/"+s.BucketName+"/") {
 			writeError(w, r, http.StatusNotFound, "NoSuchBucket", "The specified bucket does not exist")

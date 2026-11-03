@@ -58,7 +58,7 @@ manager: generate fmt vet
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: install-envtest test-api ## Run all tests
+test: fix install-envtest test-api ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -114,6 +114,10 @@ tidy:  ## Run go mod tidy
 fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
+
+fix:  ## Run go fix against code
+	go fix ./...
+	cd api ; go fix ./...
 
 vet:  ## Run go vet against code
 	go vet ./...
@@ -204,7 +208,7 @@ fuzz-smoketest: fuzz-build
 		bash -c "/runner.sh"
 
 # Run fuzz tests for the duration set in FUZZ_TIME.
-fuzz-native: 
+fuzz-native:
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	FUZZ_TIME=$(FUZZ_TIME) \
 		./tests/fuzz/native_go_run.sh

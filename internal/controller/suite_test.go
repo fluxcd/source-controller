@@ -169,7 +169,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 
 	config.HTTP.Addr = fmt.Sprintf(":%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
-	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
+	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]any{}}
 
 	if opts.withBasicAuth {
 		// create htpasswd file (w BCrypt, which is required)
@@ -513,8 +513,9 @@ func randStringRunes(n int) string {
 	return string(b)
 }
 
+//go:fix inline
 func int64p(i int64) *int64 {
-	return &i
+	return new(i)
 }
 
 func logOCIRepoStatus(t *testing.T, obj *sourcev1.OCIRepository) {
