@@ -63,7 +63,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
-	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/brokerapi"
 	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -439,7 +439,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		opts = append(opts,
 			auth.WithClient(r.Client),
 			auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.OCIRepositoryKind, obj),
-			auth.WithSPIFFEBroker(r.SPIFFEBroker))
+			auth.WithSPIFFEBrokerAPI(r.SPIFFEBroker))
 		if sa != nil {
 			opts = append(opts, auth.WithServiceAccountName(sa.Name))
 		}

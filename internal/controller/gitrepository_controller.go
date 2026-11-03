@@ -34,7 +34,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
-	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/brokerapi"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	ssh "golang.org/x/crypto/ssh"
@@ -773,7 +773,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 				auth.WithClient(r.Client),
 				auth.WithGitURL(u),
 				auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.GitRepositoryKind, obj),
-				auth.WithSPIFFEBroker(r.SPIFFEBroker))
+				auth.WithSPIFFEBrokerAPI(r.SPIFFEBroker))
 			if sa != nil {
 				authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
 			}

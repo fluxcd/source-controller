@@ -57,7 +57,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
-	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/brokerapi"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/bucket/azure"
@@ -888,7 +888,7 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 	authOpts = append(authOpts,
 		auth.WithClient(r.Client),
 		auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.BucketKind, obj),
-		auth.WithSPIFFEBroker(r.SPIFFEBroker))
+		auth.WithSPIFFEBrokerAPI(r.SPIFFEBroker))
 	if sa != nil {
 		authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
 	}
