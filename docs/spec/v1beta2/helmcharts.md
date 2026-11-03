@@ -274,7 +274,7 @@ signatures. The field offers three subfields:
 
 #### Cosign
 
-The `cosign` provider can be used to verify the signature of an OCI artifact using either a known public key or via the [Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure.
+The `cosign` provider can be used to verify the signature of an OCI artifact using either a known public key or via the [Cosign Keyless](https://docs.sigstore.dev/cosign/signing/overview/) procedure.
 
 ```yaml
 ---
@@ -321,7 +321,7 @@ This allows for older HelmCharts to be valid as long as the right key is in the 
 ##### Keyless verification
 
 For publicly available HelmCharts, which are signed using the
-[Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure,
+[Cosign Keyless](https://docs.sigstore.dev/cosign/signing/overview/) procedure,
 you can enable the verification by omitting the `.verify.secretRef` field.
 
 To verify the identity's subject and the OIDC issuer present in the Fulcio
