@@ -317,9 +317,11 @@ func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmc
 // from current, indexed by their alias or name. All dependencies of a chart
 // are present if len of returned map == 0.
 func collectMissing(current []*helmchart.Chart, reqs []*helmchart.Dependency) map[string]*helmchart.Dependency {
-	// If the number of dependencies equals the number of requested
-	// dependencies, there are no missing dependencies
-	if len(current) == len(reqs) {
+	// charts/ keeps the dependency chart name. An equal count is
+	// complete only when each requirement matches that name, or a
+	// chart already renamed to its alias. Any other count still
+	// uses the alias-or-name walk below.
+	if len(current) == len(reqs) && requirementsMatch(current, reqs) {
 		return nil
 	}
 
@@ -347,6 +349,26 @@ func collectMissing(current []*helmchart.Chart, reqs []*helmchart.Dependency) ma
 		missing[name] = dep
 	}
 	return missing
+}
+
+// requirementsMatch reports whether every requirement has a chart in
+// current. A packaged dependency keeps its chart name, so that name
+// matches even when the requirement sets an alias. A chart already
+// renamed to the alias matches that alias.
+func requirementsMatch(current []*helmchart.Chart, reqs []*helmchart.Dependency) bool {
+	for _, dep := range reqs {
+		matched := false
+		for _, existing := range current {
+			if existing.Name() == dep.Name || (dep.Alias != "" && existing.Name() == dep.Alias) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 // isLocalDep returns true if the given chart.Dependency contains a local (file) path reference.
