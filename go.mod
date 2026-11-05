@@ -27,9 +27,9 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.32.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
 	github.com/fluxcd/pkg/artifact v0.27.1
-	github.com/fluxcd/pkg/auth v0.66.1
+	github.com/fluxcd/pkg/auth v0.66.2
 	github.com/fluxcd/pkg/cache v0.19.0
-	github.com/fluxcd/pkg/git v0.56.0
+	github.com/fluxcd/pkg/git v0.56.1
 	github.com/fluxcd/pkg/gittestserver v0.33.0
 	github.com/fluxcd/pkg/helmtestserver v0.45.0
 	github.com/fluxcd/pkg/http/transport v0.9.0
@@ -38,7 +38,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.122.0
 	github.com/fluxcd/pkg/sourceignore v0.22.0
 	github.com/fluxcd/pkg/spiffe v0.2.0
-	github.com/fluxcd/pkg/ssh v0.29.0
+	github.com/fluxcd/pkg/ssh v0.29.1
 	github.com/fluxcd/pkg/tar v1.4.0
 	github.com/fluxcd/pkg/testserver v0.15.0
 	github.com/fluxcd/pkg/version v0.20.0
