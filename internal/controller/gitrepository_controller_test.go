@@ -1947,7 +1947,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 
 			for _, p := range tt.assertPaths {
-				absoluteP := filepath.Join(testStorage.BasePath, p)
+				absoluteP := filepath.Join(testStorage.BasePath, strings.TrimPrefix(p, "!"))
 				if !strings.HasPrefix(p, "!") {
 					g.Expect(absoluteP).To(BeAnExistingFile())
 					continue
