@@ -504,24 +504,36 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 	pool.AppendCertsFromPEM(tlsCA)
 
 	tests := []struct {
-		name             string
-		url              string
-		registryOpts     registryOptions
-		craneOpts        []crane.Option
-		secretOpts       secretOptions
-		tlsCertSecret    *corev1.Secret
-		insecure         bool
-		provider         string
-		providerImg      string
-		want             sreconcile.Result
-		wantErr          bool
-		assertConditions []metav1.Condition
+		name                  string
+		url                   string
+		registryOpts          registryOptions
+		craneOpts             []crane.Option
+		secretOpts            secretOptions
+		tlsCertSecret         *corev1.Secret
+		insecure              bool
+		provider              string
+		providerImg           string
+		defaultServiceAccount string
+		want                  sreconcile.Result
+		wantErr               bool
+		assertConditions      []metav1.Condition
 	}{
 		{
 			name:      "HTTP without basic auth",
 			want:      sreconcile.ResultSuccess,
 			craneOpts: []crane.Option{crane.Insecure},
 			insecure:  true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+			},
+		},
+		{
+			name:                  "HTTP without basic auth ignores default service account",
+			want:                  sreconcile.ResultSuccess,
+			craneOpts:             []crane.Option{crane.Insecure},
+			insecure:              true,
+			defaultServiceAccount: "missing-sa",
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
@@ -888,6 +900,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				Recorder:              events.NewFakeRecorder(32, false),
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
+				DefaultServiceAccount: tt.defaultServiceAccount,
 				patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 
