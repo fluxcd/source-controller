@@ -938,11 +938,12 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 	tests := []struct {
-		name       string
-		url        string
-		secret     *corev1.Secret
-		beforeFunc func(obj *sourcev1.GitRepository)
-		wantErr    string
+		name                  string
+		url                   string
+		secret                *corev1.Secret
+		beforeFunc            func(obj *sourcev1.GitRepository)
+		defaultServiceAccount string
+		wantErr               string
 	}{
 		{
 			name: "azure provider",
@@ -1055,6 +1056,46 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			},
 		},
 		{
+			name:                  "generic provider ignores default service account",
+			url:                   "https://example.com/org/repo",
+			defaultServiceAccount: "missing-sa",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGeneric
+			},
+		},
+		{
+			name:                  "no provider ignores default service account",
+			url:                   "https://example.com/org/repo",
+			defaultServiceAccount: "missing-sa",
+		},
+		{
+			name:                  "github provider ignores default service account",
+			url:                   "https://github.com/org/repo.git",
+			defaultServiceAccount: "missing-sa",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+			},
+			wantErr: "secretRef with github app data must be specified when provider is set to github",
+		},
+		{
+			name:                  "aws provider resolves default service account",
+			url:                   "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
+			defaultServiceAccount: "missing-sa",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAWS
+			},
+			wantErr: "failed to get service account",
+		},
+		{
+			name:                  "azure provider resolves default service account",
+			url:                   "https://dev.azure.com/foo/bar/_git/baz",
+			defaultServiceAccount: "missing-sa",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAzure
+			},
+			wantErr: "failed to get service account",
+		},
+		{
 			name: "secret ref defined for non existing secret",
 			url:  "https://github.com/org/repo.git",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -1083,9 +1124,10 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 
 			obj := &sourcev1.GitRepository{}
 			r := &GitRepositoryReconciler{
-				Recorder:     events.NewFakeRecorder(32, false),
-				Client:       clientBuilder.Build(),
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				Recorder:              events.NewFakeRecorder(32, false),
+				Client:                clientBuilder.Build(),
+				DefaultServiceAccount: tt.defaultServiceAccount,
+				patchOptions:          getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			url, err := url.Parse(tt.url)
