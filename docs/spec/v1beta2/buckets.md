@@ -141,7 +141,7 @@ attempt to communicate with the specified [Endpoint](#endpoint) using the
 [Minio Client SDK](https://github.com/minio/minio-go), which can communicate
 with any Amazon S3 compatible object storage (including
 [GCS](https://cloud.google.com/storage/docs/interoperability),
-[Wasabi](https://wasabi-support.zendesk.com/hc/en-us/articles/360002079671-How-do-I-use-Minio-Client-with-Wasabi-),
+[Wasabi](https://docs.wasabi.com/docs/how-do-i-use-minio-client-with-wasabi),
 and many others).
 
 The `generic` Provider _requires_ a [Secret reference](#secret-reference) to a
