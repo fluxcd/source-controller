@@ -23,11 +23,11 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.9.2
 	github.com/fluxcd/cli-utils v1.4.0
-	github.com/fluxcd/pkg/apis/crypto v0.5.0
+	github.com/fluxcd/pkg/apis/crypto v0.7.0
 	github.com/fluxcd/pkg/apis/event v0.32.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
 	github.com/fluxcd/pkg/artifact v0.28.0
-	github.com/fluxcd/pkg/auth v0.66.0
+	github.com/fluxcd/pkg/auth v0.69.0
 	github.com/fluxcd/pkg/cache v0.19.0
 	github.com/fluxcd/pkg/git v0.56.0
 	github.com/fluxcd/pkg/gittestserver v0.33.0
@@ -37,7 +37,7 @@ require (
 	github.com/fluxcd/pkg/oci v0.73.0
 	github.com/fluxcd/pkg/runtime v0.122.0
 	github.com/fluxcd/pkg/sourceignore v0.22.0
-	github.com/fluxcd/pkg/spiffe v0.2.0
+	github.com/fluxcd/pkg/spiffe v0.4.0
 	github.com/fluxcd/pkg/ssh v0.29.0
 	github.com/fluxcd/pkg/tar v1.4.0
 	github.com/fluxcd/pkg/testserver v0.15.0
