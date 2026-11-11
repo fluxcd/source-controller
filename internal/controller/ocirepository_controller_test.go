@@ -3024,13 +3024,22 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	// Tag the same image with additional variants to test semver tag parsing:
+	// v-prefixed tags, mixed v-prefixed and unprefixed tags, and tags with
+	// only two segments (which are not valid SemVer and must be ignored).
+	repoURL := fmt.Sprintf("%s/podinfo", server.registryHost)
+	for _, tag := range []string{"v1.2.3", "1.2.4", "1.3.0", "1.9", "v1.9"} {
+		g.Expect(crane.Tag(repoURL, tag, crane.Insecure)).To(Succeed())
+	}
+
 	tests := []struct {
-		name      string
-		url       string
-		reference *sourcev1.OCIRepositoryRef
-		selector  *sourcev1.OCILayerSelector
-		wantErr   bool
-		want      types.GomegaMatcher
+		name            string
+		url             string
+		reference       *sourcev1.OCIRepositoryRef
+		selector        *sourcev1.OCILayerSelector
+		wantErr         bool
+		wantErrContains string
+		want            types.GomegaMatcher
 	}{
 		{
 			name: "valid url with no reference",
@@ -3074,6 +3083,78 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			// two are equivalently new.
 			want: Or(Equal(server.registryHost+"/podinfo:6.2.1_ref.1234567"),
 				Equal(server.registryHost+"/podinfo:6.2.1")),
+		},
+		{
+			name: "valid url with v-prefixed semver tag",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "1.2.3",
+			},
+			want: Equal(server.registryHost + "/podinfo:v1.2.3"),
+		},
+		{
+			name: "valid url with mixed v-prefixed and unprefixed semver tags",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "1.2.x",
+			},
+			want: Equal(server.registryHost + "/podinfo:1.2.4"),
+		},
+		{
+			name: "valid url with x-range semver constraint",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "1.x",
+			},
+			want: Equal(server.registryHost + "/podinfo:1.3.0"),
+		},
+		{
+			name: "valid url with v-prefixed x-range semver constraint",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "v1.x",
+			},
+			want: Equal(server.registryHost + "/podinfo:1.3.0"),
+		},
+		{
+			// A two-segment constraint is treated by Masterminds as an
+			// x-range, so "1.2" is equivalent to "1.2.x".
+			name: "valid url with two-segment semver constraint",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "1.2",
+			},
+			want: Equal(server.registryHost + "/podinfo:1.2.4"),
+		},
+		{
+			name: "valid url with v-prefixed two-segment semver constraint",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "v1.2",
+			},
+			want: Equal(server.registryHost + "/podinfo:1.2.4"),
+		},
+		{
+			name: "two-segment semver tags are ignored",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				// The registry contains the tags "1.9" and "v1.9". Masterminds
+				// semver would coerce "1.9" to "1.9.0", which this range would
+				// match, but version.ParseVersion requires major.minor.patch
+				// and skips both tags.
+				SemVer: "1.9.x",
+			},
+			wantErr:         true,
+			wantErrContains: "no match found for semver: 1.9.x",
+		},
+		{
+			name: "invalid semver constraint",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "garbage",
+			},
+			wantErr:         true,
+			wantErrContains: "semver 'garbage' parse error",
 		},
 		{
 			name:    "invalid url without oci prefix",
@@ -3136,6 +3217,9 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			got, err := r.getArtifactRef(obj, opts)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
+				if tt.wantErrContains != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.wantErrContains))
+				}
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
