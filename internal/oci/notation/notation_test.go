@@ -654,7 +654,7 @@ func TestRemoteRepoAuthTokenReuse(t *testing.T) {
 	// setting the scope hint on the context exactly like the ORAS repository
 	// methods do during verification.
 	doRequests := func(client *oauth.Client, n int) {
-		for i := 0; i < n; i++ {
+		for range n {
 			ctx := oauth.WithScopesForHost(context.Background(), host, scope)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 				fmt.Sprintf("%s/v2/%s/manifests/latest", baseURL, repository), nil)
@@ -787,15 +787,15 @@ func (t *testLogger) Enabled(level int) bool {
 	return true
 }
 
-func (t *testLogger) Info(level int, msg string, keysAndValues ...interface{}) {
+func (t *testLogger) Info(level int, msg string, keysAndValues ...any) {
 	t.doLog(msg)
 }
 
-func (t *testLogger) Error(err error, msg string, keysAndValues ...interface{}) {
+func (t *testLogger) Error(err error, msg string, keysAndValues ...any) {
 	t.doLog(msg)
 }
 
-func (t *testLogger) WithValues(keysAndValues ...interface{}) logr.LogSink {
+func (t *testLogger) WithValues(keysAndValues ...any) logr.LogSink {
 	return t
 }
 

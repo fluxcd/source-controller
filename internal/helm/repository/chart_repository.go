@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -88,19 +89,19 @@ func IndexFromBytes(b []byte) (*repo.IndexFile, error) {
 	}
 
 	for name, cvs := range i.Entries {
-		for idx := len(cvs) - 1; idx >= 0; idx-- {
-			if cvs[idx] == nil {
+		for idx, cv := range slices.Backward(cvs) {
+			if cv == nil {
 				cvs = append(cvs[:idx], cvs[idx+1:]...)
 				continue
 			}
 			// When metadata section missing, initialize with no data
-			if cvs[idx].Metadata == nil {
-				cvs[idx].Metadata = &chart.Metadata{}
+			if cv.Metadata == nil {
+				cv.Metadata = &chart.Metadata{}
 			}
-			if cvs[idx].APIVersion == "" {
-				cvs[idx].APIVersion = chart.APIVersionV1
+			if cv.APIVersion == "" {
+				cv.APIVersion = chart.APIVersionV1
 			}
-			if err := cvs[idx].Validate(); ignoreSkippableChartValidationError(err) != nil {
+			if err := cv.Validate(); ignoreSkippableChartValidationError(err) != nil {
 				cvs = append(cvs[:idx], cvs[idx+1:]...)
 			}
 		}
@@ -503,7 +504,7 @@ func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) (
 //
 // Can potentially be replaced when Helm PR for JSON support has been merged.
 // xref: https://github.com/helm/helm/pull/12245
-func jsonOrYamlUnmarshal(b []byte, i interface{}) error {
+func jsonOrYamlUnmarshal(b []byte, i any) error {
 	if json.Valid(b) {
 		return json.Unmarshal(b, i)
 	}

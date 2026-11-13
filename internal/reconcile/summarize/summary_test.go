@@ -328,10 +328,8 @@ func TestSummarizeAndPatch(t *testing.T) {
 			g.Expect(sourcev1.AddToScheme(scheme)).To(Succeed())
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   tt.generation,
-				},
+				GenerateName: "test-",
+				Generation:   tt.generation,
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: 5 * time.Second},
 				},
@@ -458,9 +456,7 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 				Build()
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-				},
+				GenerateName: "test-",
 				Spec: sourcev1.GitRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 				},

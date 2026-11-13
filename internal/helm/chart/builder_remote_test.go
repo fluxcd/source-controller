@@ -456,7 +456,7 @@ func Test_mergeChartValues(t *testing.T) {
 		chart         *helmchart.Chart
 		paths         []string
 		ignoreMissing bool
-		wantValues    map[string]interface{}
+		wantValues    map[string]any
 		wantFiles     []string
 		wantErr       string
 	}{
@@ -470,7 +470,7 @@ func Test_mergeChartValues(t *testing.T) {
 				},
 			},
 			paths: []string{"a.yaml", "b.yaml", "c.yaml"},
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 				"b": "d",
 			},
@@ -482,12 +482,12 @@ func Test_mergeChartValues(t *testing.T) {
 				Files: []*common.File{
 					{Name: "c.yaml", Data: []byte("b: d")},
 				},
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"a": "b",
 				},
 			},
 			paths: []string{chartutil.ValuesfileName, "c.yaml"},
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 				"b": "d",
 			},
@@ -518,7 +518,7 @@ func Test_mergeChartValues(t *testing.T) {
 			},
 			paths:         []string{"a.yaml", "b.yaml"},
 			ignoreMissing: true,
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 			},
 			wantFiles: []string{"a.yaml"},
@@ -528,19 +528,19 @@ func Test_mergeChartValues(t *testing.T) {
 			chart:         &helmchart.Chart{},
 			paths:         []string{"a.yaml"},
 			ignoreMissing: true,
-			wantValues:    map[string]interface{}{},
+			wantValues:    map[string]any{},
 			wantFiles:     []string{},
 		},
 		{
 			name: "uses chart values ignoring missing file",
 			chart: &helmchart.Chart{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"a": "b",
 				},
 			},
 			paths:         []string{chartutil.ValuesfileName, "c.yaml"},
 			ignoreMissing: true,
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 			},
 			wantFiles: []string{chartutil.ValuesfileName},

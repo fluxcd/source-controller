@@ -19,6 +19,7 @@ package index
 import (
 	"fmt"
 	"io"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -54,9 +55,7 @@ func WithIndex(i map[string]string) DigesterOption {
 			if d.index == nil {
 				d.index = make(map[string]string, len(i))
 			}
-			for k, v := range i {
-				d.index[k] = v
-			}
+			maps.Copy(d.index, i)
 			d.reset()
 		}
 	}
@@ -118,9 +117,7 @@ func (i *Digester) Index() map[string]string {
 	defer i.mu.RUnlock()
 
 	index := make(map[string]string, len(i.index))
-	for k, v := range i.index {
-		index[k] = v
-	}
+	maps.Copy(index, i.index)
 	return index
 }
 
