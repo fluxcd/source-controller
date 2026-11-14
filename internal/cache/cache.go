@@ -27,7 +27,7 @@ type Cache struct {
 // Item is an item stored in the cache.
 type Item struct {
 	// Object is the item's value.
-	Object interface{}
+	Object any
 	// Expiration is the item's expiration time.
 	Expiration int64
 }
@@ -50,7 +50,7 @@ func (c *cache) ItemCount() int {
 	return n
 }
 
-func (c *cache) set(key string, value interface{}, expiration time.Duration) {
+func (c *cache) set(key string, value any, expiration time.Duration) {
 	var e int64
 	if expiration > 0 {
 		e = time.Now().Add(expiration).UnixNano()
@@ -65,7 +65,7 @@ func (c *cache) set(key string, value interface{}, expiration time.Duration) {
 // Set adds an item to the cache, replacing any existing item.
 // If expiration is zero, the item never expires.
 // If the cache is full, Set will return an error.
-func (c *cache) Set(key string, value interface{}, expiration time.Duration) error {
+func (c *cache) Set(key string, value any, expiration time.Duration) error {
 	c.mu.Lock()
 	_, found := c.Items[key]
 	if found {
@@ -87,7 +87,7 @@ func (c *cache) Set(key string, value interface{}, expiration time.Duration) err
 // Add an item to the cache, existing items will not be overwritten.
 // To overwrite existing items, use Set.
 // If the cache is full, Add will return an error.
-func (c *cache) Add(key string, value interface{}, expiration time.Duration) error {
+func (c *cache) Add(key string, value any, expiration time.Duration) error {
 	c.mu.Lock()
 	_, found := c.Items[key]
 	if found {
@@ -107,7 +107,7 @@ func (c *cache) Add(key string, value interface{}, expiration time.Duration) err
 
 // Get an item from the cache. Returns the item or nil, and a bool indicating
 // whether the key was found.
-func (c *cache) Get(key string) (interface{}, bool) {
+func (c *cache) Get(key string) (any, bool) {
 	c.mu.RLock()
 	item, found := c.Items[key]
 	if !found {

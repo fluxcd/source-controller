@@ -39,7 +39,7 @@ import (
 // The action identifies the reconcile stage that produced the event and is
 // recorded in the event's action field. Callers pass the relevant
 // sourcev1.Action for the stage.
-func EventLogf(ctx context.Context, rec events.Recorder, obj runtime.Object, eventType string, reason string, action sourcev1.Action, messageFmt string, args ...interface{}) {
+func EventLogf(ctx context.Context, rec events.Recorder, obj runtime.Object, eventType string, reason string, action sourcev1.Action, messageFmt string, args ...any) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	if eventType == corev1.EventTypeWarning {
 		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)

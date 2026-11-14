@@ -80,13 +80,11 @@ func NewStalling(err error, reason string) *Stalling {
 	// Stalling errors are not returned to the runtime. Log it explicitly.
 	// Since this failure requires user interaction, send warning notification.
 	return &Stalling{
-		Reason: reason,
-		Err:    err,
-		Config: Config{
-			Event:        corev1.EventTypeWarning,
-			Log:          true,
-			Notification: true,
-		},
+		Reason:       reason,
+		Err:          err,
+		Event:        corev1.EventTypeWarning,
+		Log:          true,
+		Notification: true,
 	}
 }
 
@@ -124,10 +122,8 @@ func NewWaiting(err error, reason string) *Waiting {
 	return &Waiting{
 		Reason: reason,
 		Err:    err,
-		Config: Config{
-			Event: corev1.EventTypeNormal,
-			Log:   true,
-		},
+		Event:  corev1.EventTypeNormal,
+		Log:    true,
 	}
 }
 
@@ -157,11 +153,9 @@ func NewGeneric(err error, reason string) *Generic {
 	// Since it's a generic error, it'll be returned to the runtime and logged
 	// automatically, do not log it. Send failure notification.
 	return &Generic{
-		Reason: reason,
-		Err:    err,
-		Config: Config{
-			Event:        corev1.EventTypeWarning,
-			Notification: true,
-		},
+		Reason:       reason,
+		Err:          err,
+		Event:        corev1.EventTypeWarning,
+		Notification: true,
 	}
 }
