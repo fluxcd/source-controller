@@ -22,20 +22,24 @@ import (
 
 type artifactSet []*meta.Artifact
 
-// Diff returns true if any of the revisions in the artifactSet does not match any of the given artifacts.
+// Diff returns true if the revisions in the artifactSet do not match those of
+// the given set, regardless of order. A revision that appears more than once
+// must appear the same number of times in both sets, otherwise a change in a
+// set that holds duplicate revisions goes unnoticed.
 func (s artifactSet) Diff(set artifactSet) bool {
 	if len(s) != len(set) {
 		return true
 	}
 
-outer:
+	counts := make(map[string]int, len(set))
+	for _, k := range set {
+		counts[k.Revision]++
+	}
 	for _, j := range s {
-		for _, k := range set {
-			if k.HasRevision(j.Revision) {
-				continue outer
-			}
+		if counts[j.Revision] == 0 {
+			return true
 		}
-		return true
+		counts[j.Revision]--
 	}
 	return false
 }
