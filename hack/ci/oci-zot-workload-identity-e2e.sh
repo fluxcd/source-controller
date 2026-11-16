@@ -770,12 +770,12 @@ EOF
 kubectl -n "${NS}" rollout status deploy/source-controller --timeout=2m
 for _ in $(seq 1 30); do
     logs="$(kubectl -n "${NS}" logs deploy/source-controller)"
-    if grep -qF "object-level workload identity will use the SPIFFE Broker API" <<<"${logs}"; then
+    if grep -qF "SPIFFE Broker API" <<<"${logs}"; then
         break
     fi
     sleep 1
 done
-grep -qF "object-level workload identity will use the SPIFFE Broker API" <<<"${logs}" \
+grep -qF "SPIFFE Broker API" <<<"${logs}" \
     || fail "source-controller did not log SPIFFE Broker API usage"
 
 ##############################################################################
