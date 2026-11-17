@@ -347,10 +347,12 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	provider := obj.GetProvider()
 
-	// Apply the default ServiceAccount when the object does not specify one, so
-	// that both the keychain and the auth library are aware of it.
+	// Apply the default ServiceAccount when the object does not specify one.
+	// The generic provider only uses a ServiceAccount when explicitly
+	// referenced by the object. Applying the default ServiceAccount to the
+	// generic provider would be a breaking change, so it is not supported.
 	saName := obj.Spec.ServiceAccountName
-	if saName == "" {
+	if saName == "" && provider != sourcev1.GenericOCIProvider {
 		saName = r.DefaultServiceAccount
 	}
 
