@@ -125,7 +125,7 @@ const (
 	// object.
 	PatchOperationFailedReason string = "PatchOperationFailed"
 
-	// InvalidSTSConfigurationReason signals that the STS configurtion is invalid.
+	// InvalidSTSConfigurationReason signals that the STS configuration is invalid.
 	InvalidSTSConfigurationReason string = "InvalidSTSConfiguration"
 
 	// InvalidProviderConfigurationReason signals that the provider

@@ -299,7 +299,7 @@ This field takes precedence over [`.branch`](#branch-example) and
 
 #### Name example
 
-To Git checkout a specfied [reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References),
+To Git checkout a specified [reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References),
 use `.spec.ref.name`:
 
 ```yaml
