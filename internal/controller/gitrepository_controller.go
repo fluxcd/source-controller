@@ -1258,7 +1258,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	var message strings.Builder
 	if obj.Spec.Verification.VerifyTag() {
 		// If we need to verify a tag object, then the commit must have a tag
-		// that points to it. If it does not, then its safe to asssume that
+		// that points to it. If it does not, then its safe to assume that
 		// the checkout didn't happen via a tag reference, thus the object can
 		// be marked as stalled.
 		tag := commit.ReferencingTag
