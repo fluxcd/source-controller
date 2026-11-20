@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.10.2
+
+**Release date:** 2026-11-20
+
+This patch release restores authentication to registries whose token service runs
+on a private address, such as split-host self-hosted GitLab, and after a
+same-host redirect from HTTP to HTTPS, by updating ORAS to v2.7.0. It also fixes
+GitRepository checkouts that deleted the target of a relative symlink when the
+checked-out revision removed the symlink, which made the target file disappear
+from the artifact. The default ServiceAccount is no longer resolved for the
+`generic` and `github` providers, which do not use one: object identity for
+`generic` now only applies to sources that set `.spec.serviceAccountName`
+explicitly. Finally, the authentication cache key now includes the credential
+username and the GCP workload identity provider, so changes to them take effect
+on the next reconcile instead of reusing cached credentials until they expire.
+
+Fixes:
+- Update ORAS to v2.7.0 to restore authentication to registries whose token
+  service is on a private address and after same-host HTTP to HTTPS redirects
+  [#2242](https://github.com/fluxcd/source-controller/pull/2242)
+- Fix Git checkout removing symlink targets instead of symlinks
+  [#2238](https://github.com/fluxcd/source-controller/pull/2238)
+- Fix resolving the default ServiceAccount for providers that don't use it
+  [#2237](https://github.com/fluxcd/source-controller/pull/2237)
+
+Improvements:
+- Remove leftover object-level workload identity log message
+  [#2236](https://github.com/fluxcd/source-controller/pull/2236)
+- Update fluxcd/pkg dependencies
+  [#2228](https://github.com/fluxcd/source-controller/pull/2228)
+  [#2226](https://github.com/fluxcd/source-controller/pull/2226)
+
 ## 1.10.1
 
 **Release date:** 2026-10-26
