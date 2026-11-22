@@ -187,7 +187,13 @@ func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Fetch the OCIRepository
 	obj := &sourcev1.OCIRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if client.IgnoreNotFound(err) == nil {
+			if cleanupErr := removeArtifactsForMissingObject(r.Storage, "OCIRepository", req.Namespace, req.Name); cleanupErr != nil {
+				return ctrl.Result{}, cleanupErr
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	// Initialize the patch helper with the current version of the object.
