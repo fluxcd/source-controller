@@ -960,6 +960,52 @@ func Test_collectMissing(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "equal count, different name",
+			current: []*helmchart.Chart{
+				{
+					Metadata: &helmchart.Metadata{
+						Name: chartName + "-other",
+					},
+				},
+			},
+			reqs: []*helmchart.Dependency{
+				{Name: chartName},
+			},
+			want: map[string]*helmchart.Dependency{
+				chartName: {Name: chartName},
+			},
+		},
+		{
+			name: "equal count, vendored alias",
+			current: []*helmchart.Chart{
+				{
+					Metadata: &helmchart.Metadata{
+						Name: chartName,
+					},
+				},
+			},
+			reqs: []*helmchart.Dependency{
+				{Name: chartName, Alias: chartName + "-alias"},
+			},
+			want: nil,
+		},
+		{
+			name: "equal count, alias and name differ",
+			current: []*helmchart.Chart{
+				{
+					Metadata: &helmchart.Metadata{
+						Name: chartName + "-other",
+					},
+				},
+			},
+			reqs: []*helmchart.Dependency{
+				{Name: chartName, Alias: chartName + "-alias"},
+			},
+			want: map[string]*helmchart.Dependency{
+				chartName + "-alias": {Name: chartName, Alias: chartName + "-alias"},
+			},
+		},
+		{
 			name:    "nil",
 			current: nil,
 			reqs:    nil,
