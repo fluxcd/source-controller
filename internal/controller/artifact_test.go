@@ -112,6 +112,46 @@ func Test_artifactSet_Diff(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name: "duplicate revision replaces a distinct one, diff",
+			current: artifactSet{
+				{
+					Revision: "foo",
+				},
+				{
+					Revision: "foo",
+				},
+			},
+			updated: artifactSet{
+				{
+					Revision: "foo",
+				},
+				{
+					Revision: "bar",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "same revisions out of order, no diff",
+			current: artifactSet{
+				{
+					Revision: "foo",
+				},
+				{
+					Revision: "bar",
+				},
+			},
+			updated: artifactSet{
+				{
+					Revision: "bar",
+				},
+				{
+					Revision: "foo",
+				},
+			},
+			expected: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
