@@ -174,9 +174,7 @@ func TestComputeReconcileResult(t *testing.T) {
 			},
 			recErr: &serror.Generic{
 				Err: fmt.Errorf("some error"), Reason: "some reason",
-				Config: serror.Config{
-					Ignore: true,
-				},
+				Ignore: true,
 			},
 			wantResult: ctrl.Result{RequeueAfter: testSuccessInterval},
 			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {

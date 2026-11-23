@@ -36,7 +36,7 @@ type matchArtifact struct {
 	expected *meta.Artifact
 }
 
-func (m matchArtifact) Match(actual interface{}) (success bool, err error) {
+func (m matchArtifact) Match(actual any) (success bool, err error) {
 	actualArtifact, ok := actual.(*meta.Artifact)
 	if !ok {
 		return false, fmt.Errorf("actual should be a pointer to an Artifact")
@@ -59,10 +59,10 @@ func (m matchArtifact) Match(actual interface{}) (success bool, err error) {
 	return ok, err
 }
 
-func (m matchArtifact) FailureMessage(actual interface{}) (message string) {
+func (m matchArtifact) FailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%#v\nto match\n\t%#v\n", actual, m.expected)
 }
 
-func (m matchArtifact) NegatedFailureMessage(actual interface{}) (message string) {
+func (m matchArtifact) NegatedFailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%#v\nto not match\n\t%#v\n", actual, m.expected)
 }

@@ -72,7 +72,7 @@ func ErrorActionHandler(ctx context.Context, recorder events.Recorder, obj clien
 }
 
 // logError logs error based on the passed error configurations.
-func logError(ctx context.Context, eventType string, err error, msg string, keysAndValues ...interface{}) {
+func logError(ctx context.Context, eventType string, err error, msg string, keysAndValues ...any) {
 	switch eventType {
 	case corev1.EventTypeNormal, serror.EventTypeNone:
 		ctrl.LoggerFrom(ctx).Info(msg, keysAndValues...)

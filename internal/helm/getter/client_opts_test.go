@@ -51,17 +51,13 @@ func TestGetClientOpts(t *testing.T) {
 		{
 			name: "HelmRepository with certSecretRef discards TLS config in secretRef",
 			certSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
+				Name: "ca-file",
 				Data: map[string][]byte{
 					"ca.crt": tlsCA,
 				},
 			},
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth",
-				},
+				Name: "auth",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -75,9 +71,7 @@ func TestGetClientOpts(t *testing.T) {
 		{
 			name: "HelmRepository with TLS config only in secretRef is marked as deprecated",
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-tls",
-				},
+				Name: "auth-tls",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -93,9 +87,7 @@ func TestGetClientOpts(t *testing.T) {
 		{
 			name: "OCI HelmRepository with secretRef has auth configured",
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-oci",
-				},
+				Name: "auth-oci",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -117,9 +109,7 @@ func TestGetClientOpts(t *testing.T) {
 		{
 			name: "OCI HelmRepository with insecure repository",
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-oci",
-				},
+				Name: "auth-oci",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -192,17 +182,13 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 		{
 			name: "with valid caFile",
 			certSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
+				Name: "ca-file",
 				Data: map[string][]byte{
 					"ca.crt": tlsCA,
 				},
 			},
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-oci",
-				},
+				Name: "auth-oci",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -214,15 +200,11 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 		{
 			name: "without caFile",
 			certSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
+				Name: "ca-file",
 				Data: map[string][]byte{},
 			},
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-oci",
-				},
+				Name: "auth-oci",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
@@ -234,9 +216,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			name:       "without cert secret",
 			certSecret: nil,
 			authSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-oci",
-				},
+				Name: "auth-oci",
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),

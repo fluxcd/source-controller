@@ -51,7 +51,7 @@ func New(t *testing.T) string {
 	config := &configuration.Configuration{}
 	config.HTTP.Addr = addr
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
-	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
+	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]any{}}
 	config.Log.AccessLog.Disabled = true
 	config.Log.Level = "error"
 	logrus.SetOutput(io.Discard)

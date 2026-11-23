@@ -285,7 +285,7 @@ func Test_mergeFileValues(t *testing.T) {
 		files         []*common.File
 		paths         []string
 		ignoreMissing bool
-		wantValues    map[string]interface{}
+		wantValues    map[string]any
 		wantFiles     []string
 		wantErr       string
 	}{
@@ -297,7 +297,7 @@ func Test_mergeFileValues(t *testing.T) {
 				{Name: "c.yaml", Data: []byte("b: d")},
 			},
 			paths: []string{"a.yaml", "b.yaml", "c.yaml"},
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 				"b": "d",
 			},
@@ -328,7 +328,7 @@ func Test_mergeFileValues(t *testing.T) {
 			},
 			paths:         []string{"a.yaml", "b.yaml"},
 			ignoreMissing: true,
-			wantValues: map[string]interface{}{
+			wantValues: map[string]any{
 				"a": "b",
 			},
 			wantFiles: []string{"a.yaml"},
@@ -337,7 +337,7 @@ func Test_mergeFileValues(t *testing.T) {
 			name:          "all files missing",
 			paths:         []string{"a.yaml"},
 			ignoreMissing: true,
-			wantValues:    map[string]interface{}{},
+			wantValues:    map[string]any{},
 			wantFiles:     []string{},
 		},
 	}

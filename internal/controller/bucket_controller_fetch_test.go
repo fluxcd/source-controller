@@ -319,7 +319,7 @@ func Test_fetchFiles(t *testing.T) {
 		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
-		for i := 0; i < 2*maxConcurrentBucketFetches; i++ {
+		for i := range 2 * maxConcurrentBucketFetches {
 			f := fmt.Sprintf("file-%d", i)
 			client.addObject(f, mockBucketObject{etag: f, data: f})
 		}

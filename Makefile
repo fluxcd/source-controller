@@ -32,6 +32,7 @@ BUILD_DIR := $(REPOSITORY_ROOT)/build
 
 # Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.24.0
+GOPLS_VERSION ?= v0.24.0
 
 # FUZZ_TIME defines the max amount of time, in Go Duration,
 # each fuzzer should run for.
@@ -58,7 +59,7 @@ manager: generate fmt vet
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: install-envtest test-api ## Run all tests
+test: fix install-envtest test-api ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -115,9 +116,28 @@ fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
 
+# Some analyzers need more than one pass to reach a fixed point, e.g.
+# modernize adds //go:fix inline before the inliner rewrites call sites.
+fix:  ## Run go fix against code until it makes no changes
+	@set -e; while true; do \
+		before=$$(git diff --no-ext-diff --no-color HEAD -- '*.go' | cksum); \
+		go fix ./...; \
+		( cd api && go fix ./... ); \
+		after=$$(git diff --no-ext-diff --no-color HEAD -- '*.go' | cksum); \
+		if [ "$$before" = "$$after" ]; then break; fi; \
+	done
+
 vet:  ## Run go vet against code
 	go vet ./...
 	cd api; go vet ./...
+
+# The unusedfunc and unusedparams analyzers report diagnostics at info severity.
+unused: gopls  ## Check for unused code and parameters
+	@out=$$($(GOPLS) check -severity=info $$(git ls-files '*.go') | grep -E 'unused parameter:| is unused$$' || true); \
+	if [ -n "$$out" ]; then \
+		printf '%s\n' "$$out"; \
+		exit 1; \
+	fi
 
 generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
@@ -136,6 +156,12 @@ CONTROLLER_GEN = $(GOBIN)/controller-gen
 .PHONY: controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
+
+# Find or download gopls
+GOPLS = $(GOBIN)/gopls
+.PHONY: gopls
+gopls: ## Download gopls locally if necessary.
+	$(call go-install-tool,$(GOPLS),golang.org/x/tools/gopls@$(GOPLS_VERSION))
 
 # Find or download gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS = $(GOBIN)/gen-crd-api-reference-docs
@@ -163,7 +189,7 @@ help:  ## Display this help menu
 e2e:
 	./hack/ci/e2e.sh
 
-verify: fmt vet manifests api-docs tidy
+verify: fmt vet unused manifests api-docs tidy
 	@if [ ! "$$(git status --porcelain --untracked-files=no)" = "" ]; then \
 		echo "working directory is dirty:"; \
 		git --no-pager diff; \
@@ -204,7 +230,7 @@ fuzz-smoketest: fuzz-build
 		bash -c "/runner.sh"
 
 # Run fuzz tests for the duration set in FUZZ_TIME.
-fuzz-native: 
+fuzz-native:
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	FUZZ_TIME=$(FUZZ_TIME) \
 		./tests/fuzz/native_go_run.sh

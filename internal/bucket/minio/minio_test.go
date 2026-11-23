@@ -38,7 +38,6 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/sourceignore"
@@ -80,10 +79,8 @@ var (
 	bucketName = "test-bucket-minio" + uuid.New().String()
 	prefix     = ""
 	secret     = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "minio-secret",
-			Namespace: "default",
-		},
+		Name:      "minio-secret",
+		Namespace: "default",
 		Data: map[string][]byte{
 			"accesskey": []byte(testAccessKey),
 			"secretkey": []byte(testSecretKey),
@@ -91,18 +88,14 @@ var (
 		Type: "Opaque",
 	}
 	emptySecret = corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "minio-secret",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{},
-		Type: "Opaque",
+		Name:      "minio-secret",
+		Namespace: "default",
+		Data:      map[string][]byte{},
+		Type:      "Opaque",
 	}
 	bucket = sourcev1.Bucket{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "minio-test-bucket",
-			Namespace: "default",
-		},
+		Name:      "minio-test-bucket",
+		Namespace: "default",
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
 			Provider:   "generic",
@@ -112,10 +105,8 @@ var (
 		},
 	}
 	bucketAwsProvider = sourcev1.Bucket{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "minio-test-bucket",
-			Namespace: "default",
-		},
+		Name:      "minio-test-bucket",
+		Namespace: "default",
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
 			Provider:   "aws",
@@ -193,10 +184,8 @@ func TestNewClientEmptySecret(t *testing.T) {
 func TestNewClientAWSProvider(t *testing.T) {
 	t.Run("with secret", func(t *testing.T) {
 		validSecret := corev1.Secret{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      "valid-secret",
-				Namespace: "default",
-			},
+			Name:      "valid-secret",
+			Namespace: "default",
 			Data: map[string][]byte{
 				"accesskey": []byte(testAccessKey),
 				"secretkey": []byte(testSecretKey),
@@ -716,7 +705,7 @@ func TestValidateSTSSecret(t *testing.T) {
 		{
 			name:     "empty ldap secret",
 			provider: "ldap",
-			secret:   &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "ldap-secret"}},
+			secret:   &corev1.Secret{Name: "ldap-secret"},
 			err:      "invalid 'ldap-secret' secret data for 'ldap' STS provider: required fields username, password",
 		},
 		{

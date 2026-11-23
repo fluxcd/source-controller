@@ -32,7 +32,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -250,7 +249,7 @@ func main() {
 					setupLog.Error(err, "unable to close SPIFFE Broker client")
 				}
 			}()
-			setupLog.Info("object-level workload identity will use the SPIFFE Broker API",
+			setupLog.Info("SPIFFE Broker API",
 				"endpoint", spiffeBrokerEndpoint, "spiffeIDs", spiffeBrokerIDs)
 		}
 	}
@@ -461,7 +460,7 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 			ExtraHandlers: pprof.GetHandlers(),
 		},
 		Controller: ctrlcfg.Controller{
-			RecoverPanic:            ptr.To(true),
+			RecoverPanic:            new(true),
 			MaxConcurrentReconciles: maxConcurrent,
 		},
 	}

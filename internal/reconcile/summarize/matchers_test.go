@@ -39,7 +39,7 @@ type haveStatusObservedGeneration struct {
 	actual   int64
 }
 
-func (m *haveStatusObservedGeneration) Match(actual interface{}) (success bool, err error) {
+func (m *haveStatusObservedGeneration) Match(actual any) (success bool, err error) {
 	obj, ok := actual.(runtime.Object)
 	if !ok {
 		return false, fmt.Errorf("actual should be a runtime object")
@@ -54,11 +54,11 @@ func (m *haveStatusObservedGeneration) Match(actual interface{}) (success bool, 
 	return Equal(m.expected).Match(og)
 }
 
-func (m *haveStatusObservedGeneration) FailureMessage(actual interface{}) (message string) {
+func (m *haveStatusObservedGeneration) FailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%d\nto match\n\t%d\n", m.actual, m.expected)
 }
 
-func (m *haveStatusObservedGeneration) NegatedFailureMessage(actual interface{}) (message string) {
+func (m *haveStatusObservedGeneration) NegatedFailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%d\nto not match\n\t%d\n", m.actual, m.expected)
 }
 
@@ -75,7 +75,7 @@ type haveStatusLastHandledReconcileAt struct {
 	actual   string
 }
 
-func (m *haveStatusLastHandledReconcileAt) Match(actual interface{}) (success bool, err error) {
+func (m *haveStatusLastHandledReconcileAt) Match(actual any) (success bool, err error) {
 	obj, ok := actual.(runtime.Object)
 	if !ok {
 		return false, fmt.Errorf("actual should be a runtime object")
@@ -90,10 +90,10 @@ func (m *haveStatusLastHandledReconcileAt) Match(actual interface{}) (success bo
 	return Equal(m.expected).Match(ra)
 }
 
-func (m *haveStatusLastHandledReconcileAt) FailureMessage(actual interface{}) (message string) {
+func (m *haveStatusLastHandledReconcileAt) FailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%s\nto match\n\t%s\n", m.actual, m.expected)
 }
 
-func (m *haveStatusLastHandledReconcileAt) NegatedFailureMessage(actual interface{}) (message string) {
+func (m *haveStatusLastHandledReconcileAt) NegatedFailureMessage(actual any) (message string) {
 	return fmt.Sprintf("expected\n\t%s\nto not match\n\t%s\n", m.actual, m.expected)
 }

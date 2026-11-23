@@ -123,10 +123,10 @@ func TestLoginOptionFromSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			secret := corev1.Secret{}
-			secret.Name = "test-secret"
-			secret.Data = tt.secretData
-			secret.Type = tt.secretType
+			secret := corev1.Secret{
+				Name: "test-secret",
+				Data: tt.secretData,
+				Type: tt.secretType}
 
 			_, err := KeychainFromSecret(tt.url, secret)
 			g.Expect(err != nil).To(Equal(tt.wantErr))

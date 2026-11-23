@@ -693,8 +693,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	// Check if SSH identity key is encrypted but no password was provided.
 	if opts.Transport == git.SSH && len(opts.Identity) > 0 && opts.Password == "" {
 		_, err := ssh.ParseRawPrivateKey(opts.Identity)
-		var missingErr *ssh.PassphraseMissingError
-		if errors.As(err, &missingErr) {
+		if _, ok := errors.AsType[*ssh.PassphraseMissingError](err); ok {
 			e := serror.NewGeneric(
 				fmt.Errorf("SSH identity key is encrypted but no 'password' field was provided in the secret '%s/%s'",
 					obj.GetNamespace(), obj.Spec.SecretRef.Name),
@@ -712,23 +711,27 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		(opts.Username != "" || opts.Password != "" || opts.BearerToken != "" || len(opts.Identity) > 0 ||
 			len(authData[githubapp.KeyAppID]) > 0 || len(authData[githubapp.KeyAppClientID]) > 0)
 
-	// Resolve the ServiceAccount once, applying the default ServiceAccount when
-	// the object does not specify one.
-	saName := obj.Spec.ServiceAccountName
-	if saName == "" {
-		saName = r.DefaultServiceAccount
-	}
+	// Resolve the ServiceAccount only for the providers that use it for
+	// authentication. The default ServiceAccount does not apply to the generic
+	// and github providers, which do not use a ServiceAccount.
 	var sa *corev1.ServiceAccount
-	if saName != "" {
-		sa = &corev1.ServiceAccount{}
-		saRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: saName}
-		if err := r.Get(ctx, saRef, sa); err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to get service account '%s': %w", saRef, err),
-				sourcev1.AuthenticationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return nil, e
+	switch provider {
+	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
+		saName := obj.Spec.ServiceAccountName
+		if saName == "" {
+			saName = r.DefaultServiceAccount
+		}
+		if saName != "" {
+			sa = &corev1.ServiceAccount{}
+			saRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: saName}
+			if err := r.Get(ctx, saRef, sa); err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to get service account '%s': %w", saRef, err),
+					sourcev1.AuthenticationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+				return nil, e
+			}
 		}
 	}
 
