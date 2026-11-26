@@ -151,18 +151,32 @@ type trustStore struct {
 func (s trustStore) GetCertificates(ctx context.Context, storeType truststore.Type, namedStore string) ([]*x509.Certificate, error) {
 	certs := []*x509.Certificate{}
 	for _, data := range s.certs {
-		raw := data
-		block, _ := pem.Decode(raw)
-		if block != nil {
-			raw = block.Bytes
-		}
-
-		cert, err := x509.ParseCertificates(raw)
+		cert, err := parseCertificates(data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse certificate '%s': %s", namedStore, err)
 		}
 
 		certs = append(certs, cert...)
+	}
+
+	return certs, nil
+}
+
+// parseCertificates parses every certificate in data, which is either a bundle
+// of one or more PEM blocks or raw DER.
+func parseCertificates(data []byte) ([]*x509.Certificate, error) {
+	block, rest := pem.Decode(data)
+	if block == nil {
+		return x509.ParseCertificates(data)
+	}
+
+	var certs []*x509.Certificate
+	for ; block != nil; block, rest = pem.Decode(rest) {
+		parsed, err := x509.ParseCertificates(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, parsed...)
 	}
 
 	return certs, nil
